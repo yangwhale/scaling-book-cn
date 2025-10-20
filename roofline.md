@@ -214,7 +214,7 @@ Again assuming B is small, we have 2BDF bfloat16 FLOPs but only DF weights (inst
 
 {% enddetails %}
 
-**Question 3:** Taking the setup from Question 2, make a roofline plot of peak FLOPs vs. $B$ for $F = D = 4096$ and $F = D = 1024$. *Use the exact number of bytes loaded, not an approximation.*
+**Question 3:** Taking the setup from Question 2, make a roofline plot of peak FLOPs/s vs. $B$ for $F = D = 4096$ and $F = D = 1024$. *Use the exact number of bytes loaded, not an approximation.*
 
 {% details Click here for the answer. %}
 
