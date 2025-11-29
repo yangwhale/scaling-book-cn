@@ -431,19 +431,60 @@ np.testing.assert_array_equal(y1, y2)
 
 {% enddetails %}
 
-**Problem 2:** Here we'll make a basic "mixture of experts" model together. Let **W**: float32[E<sub>X</sub>, D, F<sub>Y</sub>] be a set of E "expert" matrices. Let **A**: float32[S<sub>X</sub>, D<sub>Y</sub>] (our activations) and let **B** be a set of "routing assignments" where B[i] is an integer in the range `[0, E)` telling us which matrix we want to process that activation. We want to write a function in JAX that returns `Out[i] = W[B[i]] @ A[i]`.
+**Problem 2:** Here we'll make a basic "mixture of experts" model together. Let **W**: float32[E<sub>X</sub>, D, F] be a set of E "expert" matrices. Let **A**: float32[S<sub>X</sub>, D] (our activations) and let **B**: int32[S<sub>X</sub>] be a set of "routing assignments" where B[i] is an integer in the range `[0, E)` telling us which matrix we want to process that activation. We want to write a function in JAX that returns `Out[i] = W[B[i]] @ A[i]`.
 
 1. Let's start by ignoring sharding altogether. Make all of these tensors small enough so they fit in one device. Write a local implementation of this function. *Make sure you don't materialize an array of shape `[S, D, F]`! Hint: try sorting the tokens into a new buffer of shape `[E, S, D]` with some attention to masking (why do we need the second dimension to have size S?).*
 
 2. If you just `jax.jit` the above method, something will happen. Profile this and see what communication it decided to do. How long does it take?
 
-3. One problem you'll notice with the above is that it likely gathers the full set of activations **A** locally, i.e. AllGather<sub>X</sub>([S<sub>X</sub>, D<sub>Y</sub>]), Not only is this expensive communication-wise, it's also incredibly expensive memory-wise if we can't fit the full set of activations locally. Implement the above using `shard_map` and explicit communication.
+3. One problem you'll notice with the above is that it likely gathers the full set of activations **A** locally, i.e. AllGather<sub>X</sub>([S<sub>X</sub>, D]), Not only is this expensive communication-wise, it's also incredibly expensive memory-wise if we can't fit the full set of activations locally. Implement the above using `shard_map` and explicit communication.
 
       1. For a first pass, it might be easiest to use a `jax.lax.all_gather` and reorder as in (a).
 
       2. For a second pass, try to avoid materializing any array of size `[E, S, D]`, i.e. try to perform the computation in a ragged fashion using a `jax.lax.all_to_all` inside a `jax.lax.while_loop`. This way, you can avoid materializing the full activations and wasting compute on padding. How much faster is this than your original implementation?
 
 4. Most MoEs route to multiple (k) experts and then average the result. Refactor the above to implement this. Let **B**: int32[S, k] in this case for the k experts to route to.
+
+{% details Click here for the (partial) answer. %}
+
+1/2. For part (1), you have a lot of choices. Here's one option that just iterates over the experts with masking.
+
+```py
+def moe_local(W: jnp.ndarray, A: jnp.ndarray, B: jnp.ndarray) -> jnp.ndarray:
+    S, _ = A.shape
+    E, _, F = W.shape
+
+    def expert_forward(carry, e):
+        output = carry  # [S, F]
+        mask = (B == e)[:, None]  # [S, 1]
+        expert_result = A @ W[e]  # [S, F] - this expert's transform of ALL tokens
+        output = output + expert_result * mask  # Only keep results for assigned tokens
+        return output, None
+
+    output = jnp.zeros((S, F))
+    output, _ = lax.scan(expert_forward, output, jnp.arange(E))
+
+    return output
+```
+
+You can also use `jax.lax.ragged_dot` which will do something similar but more efficiently.
+
+3. I'm only going to sketch the pseudocode here (if you have a clean solution feel free to add it):
+
+```py
+chunk_size = 128
+def matmul(W, x, B):
+  i = 0
+  x = # sort x according to assignments
+  while (chunk := x[i:i+chunk_size].any()):
+     chunk = all_to_all(chunk)
+     out = matmul_local(W, chunk)
+  return concat(out)
+```
+
+The basic idea is to iterate over chunks of the array, sort them and do an all_to_all, then do the local FLOPs.
+
+{% enddetails %}
 
 **Problem 3:** The collective matmul example above is actually super relevant for real LLMs. Let's tweak the example to do the full Transformer stack.
 
