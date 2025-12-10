@@ -107,6 +107,8 @@ We'd also like to thank many others gave critical feedback throughout the proces
 There is a bunch of related writing, including the following:
 
 * [**TPU Deep Dive**](https://henryhmko.github.io/posts/tpu/tpu.html): a wonderful in-depth look at the TPU architecture in the spirit of this book.
+* [**Domain specific architectures for AI inference**](https://fleetwood.dev/posts/domain-specific-architectures): a hardware and model deep dive in the spirit of this book.
+* [**A Domain-Specific Supercomputer for Training Deep Neural Networks**](https://dl.acm.org/doi/pdf/10.1145/3360307): one of the OG TPU paper, this has a lot of great details about the Google TPU program not covered here.
 * [**Making Deep Learning Go Brrrr From First Principles**](https://horace.io/brrr_intro.html): a more GPU and PyTorch-focused tutorial on LLM rooflines and performance engineering.
 * [**Writing TPU Kernels with Pallas**](https://jax.readthedocs.io/en/latest/pallas/tpu/details.html): increasingly, TPU programming involves writing custom kernels in Pallas. This series discusses how to write kernels and many lower level TPU details that aren't mentioned here.
 * [**How to Optimize a CUDA Matmul Kernel for cuBLAS-like Performance: a Worklog**](https://siboehm.com/articles/22/CUDA-MMM): while GPU and CUDA specific, this is an excellent blog post showing how to optimize a matmul kernel in CUDA. This might be a good deep dive into how TPUs and GPUs are different.
@@ -127,5 +129,5 @@ be done even without having many hardware accelerators on hand.
 
 Please leave comments or questions so that we can improve this
 further. You can reach our corresponding author, Jacob Austin, at
-jaaustin [at] google [dot] com, or suggest edits by posting issues,
+jacobaustin123 [at] gmail [dot] com, or suggest edits by posting issues,
 pull requests, or discussions [on GitHub](https://github.com/jax-ml/scaling-book).
