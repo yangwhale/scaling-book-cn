@@ -167,7 +167,6 @@ For the below we're going to compute per-layer FLOPs to avoid having to stick fa
 
 ### MLPs
 
-
 The MLPs of a Transformer typically consist of 2 input matmuls that are element-wise combined and a single output matmul:
 
 $$
@@ -254,7 +253,7 @@ So the takeaway is that **dot-product attention FLOPs only become dominant durin
 
 ### Sparsity and Mixture-of-Experts
 
-We'd be remiss not to briefly discuss Mixture of Experts (MoE) models<d-cite key="moe"></d-cite>, which replace the single dense MLP blocks in a standard Transformer with a set of independent MLPs that can be dynamically routed between. To a first approximation, **an MoE is just a normal dense model with E MLP blocks per layer**, instead of just one. Each token activates $k$ of these experts, typically $k=2$. This increases the parameter count by $O(E)$, while multiplying the total number of activated parameters per token by $k$, compared with the dense version.
+We'd be remiss not to briefly discuss Mixture of Experts (MoE) models<d-cite key="moe"></d-cite>, which replace the single dense MLP blocks in a standard Transformer with a set of independent MLPs that can be dynamically routed between. To a first approximation, **an MoE is just a normal dense model with E MLP blocks per layer**, instead of just one. Each token activates $k$ of these experts, typically $k \ll E$. The ratio $E / k$ is called the sparsity and is usually between 8 and 64 (e.g. [DeekSeek v3](https://arxiv.org/pdf/2412.19437) has effectively $k=8$, $E=256$). This increases the parameter count by $O(E)$, while multiplying the total number of activated parameters per token by $k$, compared with the dense version.
 
 {% include figure.liquid path="assets/img/moe.png" class="img-fluid img-small" caption="<b>Figure:</b> an example MoE layer with $n$ experts. The gating expert routes each token to $k$ of them, and the output of those $k$ MLPs get summed. Our parameter count is $n$ times the size of each expert, but only $k$ are used for each token. <a href=\"https://deepgram.com/learn/mixture-of-experts-ml-model-guide\">Source</a>." %}
 
