@@ -1,7 +1,8 @@
+
 ---
 layout: distill
-title: "How to Think About GPUs"
-description: "We love TPUs at Google, but GPUs are great too. This chapter takes a deep dive into the world of GPUs – how each chip works, how they’re networked together, and what that means for LLMs, especially compared to TPUs. While there are a multitude of GPU architectures from NVIDIA, AMD, Intel, and others, here we will focus on NVIDIA GPUs. This section builds on <a href='https://jax-ml.github.io/scaling-book/tpus/'>Chapter 2</a> and <a href='https://jax-ml.github.io/scaling-book/training'>Chapter 5</a>, so you are encouraged to read them first."
+title: "如何理解 GPU"
+description: "我们在 Google 很喜欢 TPU，但 GPU 也很棒。本章深入探讨 GPU 的世界——每个芯片如何工作，它们如何联网在一起，以及这对 LLM 意味着什么，特别是与 TPU 相比。虽然有来自 NVIDIA、AMD、Intel 等的众多 GPU 架构，但这里我们将专注于 NVIDIA GPU。本节建立在<a href='https://jax-ml.github.io/scaling-book/tpus/'>第2章</a>和<a href='https://jax-ml.github.io/scaling-book/training'>第5章</a>的基础上，建议你先阅读它们。"
 date: 2025-08-18
 future: true
 htmlwidgets: true
@@ -10,10 +11,10 @@ hidden: false
 section_number: 12
 
 previous_section_url: "../conclusion"
-previous_section_name: "Part 11: Conclusion"
+previous_section_name: "第11部分：结论"
 
 next_section_url:
-next_section_name: "The End"
+next_section_name: "全文完"
 
 bibliography: main.bib
 
@@ -38,37 +39,37 @@ authors:
 #     for hyperlinks within the post to work correctly.
 #   - please use this format rather than manually creating a markdown table of contents.
 toc:
-  - name: What Is a GPU?
+  - name: 什么是 GPU？
   - subsections:
-    - name: Memory
-    - name: "Summary of GPU specs"
-    - name: GPUs vs. TPUs at the chip level
-    - name: "Quiz 1: GPU hardware"
-  - name: Networking
+    - name: 内存
+    - name: "GPU 规格概览"
+    - name: GPU 与 TPU 在芯片级别的对比
+    - name: "测验 1：GPU 硬件"
+  - name: 网络
   - subsections:
-    - name: At the node level
-    - name: "Quiz 2: GPU nodes"
-    - name: Beyond the node level
-    - name: "Quiz 3: Beyond the node level"
-  - name: How Do Collectives Work on GPUs?
+    - name: 节点级别
+    - name: "测验 2：GPU 节点"
+    - name: 超越节点级别
+    - name: "测验 3：超越节点级别"
+  - name: GPU 上的集合操作如何工作？
   - subsections:
-    - name: Intra-node collectives
-    - name: Cross-node collectives
-    - name: "Quiz 4: Collectives"
-  - name: "Rooflines for LLM Scaling on GPUs"
+    - name: 节点内集合操作
+    - name: 跨节点集合操作
+    - name: "测验 4：集合操作"
+  - name: "GPU 上 LLM 扩展的 Roofline"
   - subsections:
-    - name: "Data Parallelism"
-    - name: "Tensor Parallelism"
-    - name: "Expert Parallelism"
-    - name: "Pipeline Parallelism"
-    - name: "Examples"
-    - name: "TLDR of LLM scaling on GPUs"
-    - name: "Quiz 5: LLM rooflines"
-  - name: "Acknowledgements and Further Reading"
-  - name: "Appendix"
+    - name: "数据并行"
+    - name: "张量并行"
+    - name: "专家并行"
+    - name: "流水线并行"
+    - name: "示例"
+    - name: "GPU 上 LLM 扩展总结"
+    - name: "测验 5：LLM roofline"
+  - name: "致谢与延伸阅读"
+  - name: "附录"
   - subsections:
-    - name: "Appendix A: How does this change with GB200?"
-    - name: "Appendix B: More networking details"
+    - name: "附录 A：GB200 有什么变化？"
+    - name: "附录 B：更多网络细节"
 
 # Below is an example of injecting additional post-specific styles.
 # This is used in the 'Layouts' section of this post.
@@ -90,57 +91,57 @@ _styles: >
   }
 ---
 
-## What Is a GPU?
+## 什么是 GPU？
 
-A modern ML GPU (e.g. H100, B200) is basically a bunch of compute cores that specialize in matrix multiplication (called **Streaming Multiprocessors** or **SMs**) connected to a stick of fast memory (called **HBM**). Here’s a diagram:
+现代 ML GPU（例如 H100、B200）基本上是一堆专门做矩阵乘法的计算核心（称为**流式多处理器**或 **SM**）连接到一条快速内存（称为 **HBM**）。这是一个图示：
 
-{% include figure.liquid path="assets/gpu/gpu-diagram.png" class="img-fluid" link="true" caption="<b>Figure:</b> a diagram showing the abstract layout of an H100 or B200 GPU. An H100 has 132 SMs while a B200 has 148. We use the term 'Warp Scheduler' somewhat broadly to describe a set of 32 CUDA SIMD cores <i>and</i> the scheduler that dispatches work to them. Note how much this looks like a TPU!" %}
+{% include figure.liquid path="assets/gpu/gpu-diagram.png" class="img-fluid" link="true" caption="<b>图：</b>显示 H100 或 B200 GPU 抽象布局的图示。H100 有 132 个 SM，而 B200 有 148 个。我们广义地使用"Warp 调度器"一词来描述一组 32 个 CUDA SIMD 核心<i>和</i>向它们分派工作的调度器。注意这看起来多像 TPU！" %}
 
-Each SM, like a TPU's Tensor Core, has a dedicated matrix multiplication core (unfortunately also called a **Tensor Core**<d-footnote>The GPU Tensor Core is the matrix multiplication sub-unit of the SM, while the TPU TensorCore is the umbrella unit that contains the MXU, VPU, and other components.</d-footnote>), a vector arithmetic unit (called a **Warp Scheduler**<d-footnote>NVIDIA doesn't have a good name for this, so we use it only as the best of several bad options. The Warp Scheduler is primarily the unit that dispatches work to a set of CUDA cores, but we use it here to describe the control unit and the set of cores it controls.</d-footnote>), and a fast on-chip cache (called **SMEM**). Unlike a TPU, which has at most 2 independent "Tensor Cores", a modern GPU has more than 100 SMs (132 on an H100). Each of these SMs is much less powerful than a TPU Tensor Core but the system overall is more flexible. Each SM is more or less totally independent, so a GPU can do hundreds of separate tasks at once.<d-footnote>Although SMs are independent, they are often forced to coordinate for peak performance because they all share a capacity-limited L2 cache.</d-footnote>
+每个 SM，像 TPU 的 Tensor Core 一样，有一个专用的矩阵乘法核心（不幸的是也叫**Tensor Core**<d-footnote>GPU 的 Tensor Core 是 SM 的矩阵乘法子单元，而 TPU 的 TensorCore 是包含 MXU、VPU 和其他组件的总括单元。</d-footnote>），一个向量算术单元（称为 **Warp 调度器**<d-footnote>NVIDIA 没有一个好名字来称呼这个，所以我们只是在几个糟糕的选项中选择了最好的。Warp 调度器主要是向一组 CUDA 核心分派工作的单元，但我们在这里用它来描述控制单元和它控制的那组核心。</d-footnote>），以及一个快速片上缓存（称为 **SMEM**）。与 TPU 最多有 2 个独立的"Tensor Core"不同，现代 GPU 有超过 100 个 SM（H100 上有 132 个）。这些 SM 中的每一个都比 TPU Tensor Core 弱得多，但整个系统更灵活。每个 SM 或多或少是完全独立的，所以 GPU 可以同时做数百个不同的任务。<d-footnote>尽管 SM 是独立的，但它们通常被迫协调以获得峰值性能，因为它们都共享一个容量有限的 L2 缓存。</d-footnote>
 
-Let's take a more detailed view of an H100 SM:
+让我们更详细地看一下 H100 SM：
 
-{% include figure.liquid path="assets/gpu/blackwell-sm.png" class="img-small" link="true" caption="<b>Figure:</b> a diagram of an H100 SM (<a href='https://wccftech.com/nvidia-hopper-gh100-gpu-official-5nm-process-worlds-fastest-hpc-chip-80-billion-transistors-hbm3-memory/'>source</a>) showing the 4 <i>subpartitions</i>, each containing a Tensor Core, Warp Scheduler, Register File, and sets of CUDA Cores of different precisions. The 'L1 Data Cache' near the bottom is the 256kB SMEM unit. A B200 looks similar, but adds a substantial amount of Tensor Memory (TMEM) for feeding the bulky Tensor Cores." %}
+{% include figure.liquid path="assets/gpu/blackwell-sm.png" class="img-small" link="true" caption="<b>图：</b>H100 SM 的图示（<a href='https://wccftech.com/nvidia-hopper-gh100-gpu-official-5nm-process-worlds-fastest-hpc-chip-80-billion-transistors-hbm3-memory/'>来源</a>）显示了 4 个<i>子分区</i>，每个包含一个 Tensor Core、Warp 调度器、寄存器文件和不同精度的 CUDA 核心组。底部附近的"L1 数据缓存"是 256kB SMEM 单元。B200 看起来类似，但增加了大量的张量内存（TMEM）来馈送笨重的 Tensor Core。" %}
 
-Each SM is broken up into 4 identical quadrants, which NVIDIA calls **SM subpartitions**, each containing a Tensor Core, 16k 32-bit registers, and a SIMD/SIMT vector arithmetic unit called a Warp Scheduler, whose lanes (ALUs) NVIDIA calls **CUDA Cores**. The core component of each partition is arguably the Tensor Core, which performs matrix multiplications and makes up the vast majority of its FLOPs/s, but it’s not the only component worth noting.
+每个 SM 被分成 4 个相同的象限，NVIDIA 称之为 **SM 子分区**，每个包含一个 Tensor Core、16k 个 32 位寄存器，以及一个 SIMD/SIMT 向量算术单元叫做 Warp 调度器，其通道（ALU）NVIDIA 称之为 **CUDA 核心**。每个分区的核心组件可以说是 Tensor Core，它执行矩阵乘法并构成其绝大部分 FLOPs/s，但它不是唯一值得注意的组件。
 
-* **CUDA Cores:** each subpartition contains a set of ALUs called CUDA Cores that do SIMD/SIMT vector arithmetic. Each ALU can generally do 1 arithmetic op each cycle, e.g. f32.add.<d-footnote>Newer GPUs support FMA (Fused-Multiply Add) instructions which technically do two FLOPs each cycle, a fact NVIDIA uses ruthelessly to double their reported specs.</d-footnote> Each subpartition contains 32 fp32 cores (and a smaller number of int32 and fp64 cores) that all execute the same instruction in each cycle. Like the TPU's VPU, CUDA cores are responsible for ReLUs, pointwise vector operations, and reductions (sums).<d-footnote>Historically, before the introduction of the Tensor Core, the CUDA cores were the main component of the GPU and were used for rendering, including ray-triangle intersections and shading. On today's gaming GPUs, they still do a bulk of the rendering work, while TensorCores are used for up-sampling (DLSS), which allows the GPU to render at a lower resolution (fewer pixels = less work) and upsample using ML.</d-footnote>
+* **CUDA 核心：** 每个子分区包含一组叫做 CUDA 核心的 ALU，做 SIMD/SIMT 向量算术。每个 ALU 通常每个周期可以做 1 个算术操作，例如 f32.add。<d-footnote>较新的 GPU 支持 FMA（融合乘加）指令，技术上每个周期做两个 FLOPs，NVIDIA 无情地利用这一点来使其报告的规格翻倍。</d-footnote> 每个子分区包含 32 个 fp32 核心（以及较少数量的 int32 和 fp64 核心），它们在每个周期都执行相同的指令。像 TPU 的 VPU 一样，CUDA 核心负责 ReLU、逐点向量操作和归约（求和）。<d-footnote>历史上，在引入 Tensor Core 之前，CUDA 核心是 GPU 的主要组件，用于渲染，包括光线-三角形相交和着色。在今天的游戏 GPU 上，它们仍然做大部分渲染工作，而 TensorCore 用于上采样（DLSS），这允许 GPU 以较低分辨率渲染（更少像素 = 更少工作）并使用 ML 上采样。</d-footnote>
 
-* **Tensor Core (TC):** each subpartition has its own Tensor Core, which is a dedicated matrix multiplication unit like a TPU MXU. The Tensor Core represents the vast majority of the GPUs FLOPs/s (e.g. on an H100, we have 990 bf16 TC TFLOP/s compared to just 66 TFLOPs/s from the CUDA cores).
-  * [990 bf16 TFLOPs/s](https://www.nvidia.com/en-us/data-center/h100/) with 132 SM running at 1.76GHz means each H100 TC can do `7.5e12 / 1.76e9 / 4 ~ 1024` bf16 FLOPs/cycle, roughly an 8x8x8 matmul.<d-footnote>NVIDIA doesn’t share many TC hardware details, so this is more a guess than definite fact – certainly, it doesn’t speak to how the TC is implemented. We know that a V100 can perform 256 FLOPs/TC/cycle. An A100 can do 512, H100 can do 1024, and while the B200 details aren’t published, it seems likely it’s about 2048 FLOPs/TC/cycle, since `2250e12 / (148 * 4 * 1.86e9)` is about 2048. Some more details are confirmed <a href='https://forums.developer.nvidia.com/t/how-to-calculate-the-tensor-core-fp16-performance-of-h100/244727'>here</a>.</d-footnote>
-  * Like TPUs, GPUs can do lower precision matmuls at higher throughput (e.g. H100 has 2x fp8 FLOPs/s vs. fp16). Low-precision training or serving can be significantly faster.
-  * Each GPU generation since Volta has increased the TC size over the previous generation ([good article on this](https://semianalysis.com/2025/06/23/nvidia-tensor-core-evolution-from-volta-to-blackwell/)). With B200 the TC has gotten so large it can no longer fit its inputs in SMEM, so B200s introduce a new memory space called TMEM.<d-footnote>In Ampere, the Tensor Core could be fed from a single warp, while in Hopper it requires a full SM (warpgroup) and in Blackwell it’s fed from 2 SMs. The matmuls have also become so large in Blackwell that the arguments (specifically, the accumulator) no longer fit into register memory/SMEM, so Blackwell adds TMEM to account for this.</d-footnote>
+* **Tensor Core (TC)：** 每个子分区有自己的 Tensor Core，这是一个专用矩阵乘法单元，像 TPU MXU。Tensor Core 代表 GPU 的绝大部分 FLOPs/s（例如在 H100 上，我们有 990 bf16 TC TFLOPs/s，而 CUDA 核心只有 66 TFLOPs/s）。
+  * [990 bf16 TFLOPs/s](https://www.nvidia.com/en-us/data-center/h100/) 132 个 SM 运行在 1.76GHz 意味着每个 H100 TC 每周期可以做 `7.5e12 / 1.76e9 / 4 ~ 1024` bf16 FLOPs，大约是 8x8x8 matmul。<d-footnote>NVIDIA 不分享很多 TC 硬件细节，所以这更多是猜测而不是确定的事实——当然，它没有说明 TC 是如何实现的。我们知道 V100 每个 TC 每周期可以执行 256 FLOPs。A100 可以做 512，H100 可以做 1024，虽然 B200 的细节没有公布，但看起来很可能是每 TC 每周期约 2048 FLOPs，因为 `2250e12 / (148 * 4 * 1.86e9)` 约是 2048。更多细节在<a href='https://forums.developer.nvidia.com/t/how-to-calculate-the-tensor-core-fp16-performance-of-h100/244727'>这里</a>确认。</d-footnote>
+  * 像 TPU 一样，GPU 可以以更高的吞吐量做更低精度的 matmul（例如 H100 有 2x fp8 FLOPs/s vs. fp16）。低精度训练或服务可以显著更快。
+  * 自 Volta 以来每一代 GPU 都增加了 TC 大小（[这里有一篇好文章](https://semianalysis.com/2025/06/23/nvidia-tensor-core-evolution-from-volta-to-blackwell/)）。随着 B200，TC 变得如此大以至于它不能再把输入放在 SMEM 中，所以 B200 引入了一个叫 TMEM 的新内存空间。<d-footnote>在 Ampere 中，Tensor Core 可以从单个 warp 馈送，而在 Hopper 中它需要完整的 SM（warpgroup），在 Blackwell 中它从 2 个 SM 馈送。matmul 在 Blackwell 中也变得如此大以至于参数（特别是累加器）不再适合寄存器内存/SMEM，所以 Blackwell 添加了 TMEM 来解决这个问题。</d-footnote>
 
-**CUDA cores are more flexible than a TPU's VPU:** GPU CUDA cores (since V100) use what is called a SIMT (*Single Instruction Multiple Threads*) programming model, compared to the TPU's SIMD (*Single Instruction Multiple Data*) model. Like ALUs in a TPU's VPU, CUDA cores within a subpartition must execute the same operation in each cycle (e.g. if one core is adding two floats, then every other CUDA core in the subpartition must also do so). Unlike the VPU, however, each CUDA core (or "thread" in the CUDA programming model) has its own instruction pointer and can be _programmed_ independently. When two threads in the same warp are instructed to perform different operations, you effectively do _both_ operations, masking out the cores that don't need to perform the divergent operation.
+**CUDA 核心比 TPU 的 VPU 更灵活：** GPU CUDA 核心（自 V100 以来）使用所谓的 SIMT（*单指令多线程*）编程模型，相比 TPU 的 SIMD（*单指令多数据*）模型。像 TPU VPU 中的 ALU 一样，子分区内的 CUDA 核心必须在每个周期执行相同的操作（例如如果一个核心在加两个浮点数，那么子分区中的每个其他 CUDA 核心也必须这样做）。然而，与 VPU 不同，每个 CUDA 核心（或 CUDA 编程模型中的"线程"）有自己的指令指针，可以_独立编程_。当同一个 warp 中的两个线程被指示执行不同的操作时，你实际上_同时_做两个操作，掩盖不需要执行分歧操作的核心。
 
-{% include figure.liquid path="assets/gpu/warp-divergence.png" class="img-fluid" caption="<b>Figure:</b> an example of warp divergence within a set of threads (<a href='https://images.nvidia.com/content/volta-architecture/pdf/volta-architecture-whitepaper.pdf'>source</a>). White spaces indicate stalls of at least some fraction of the physical CUDA cores" %}
+{% include figure.liquid path="assets/gpu/warp-divergence.png" class="img-fluid" caption="<b>图：</b>一组线程中 warp 分歧的示例（<a href='https://images.nvidia.com/content/volta-architecture/pdf/volta-architecture-whitepaper.pdf'>来源</a>）。白色空间表示至少部分物理 CUDA 核心的停顿" %}
 
-This enables flexible programming at the thread level, but at the cost of silently degrading performance if warps diverge too often. Threads can also be more flexible in what memory they can access; while the VPU can only operate on contiguous blocks of memory, CUDA cores can access individual floats in shared registers and maintain per-thread state.
+这在线程级别实现了灵活编程，但代价是如果 warp 太频繁分歧会悄悄降低性能。线程在可以访问的内存方面也可以更灵活；虽然 VPU 只能操作连续的内存块，CUDA 核心可以访问共享寄存器中的单个浮点数并维护每线程状态。
 
-**CUDA core scheduling is also more flexible:** SMs run a bit like multi-threaded CPUs, in the sense that they can "schedule" many programs (**warps**) concurrently (up to 64 per SM) but each _Warp Scheduler_ only ever executes a single program in each clock cycle.<d-footnote>Warps scheduled on a given SM are called "resident".</d-footnote> The Warp Scheduler automatically switches between active warps to hide I/O operations like memory loads. TPUs are generally single threaded by comparison.
+**CUDA 核心调度也更灵活：** SM 运行有点像多线程 CPU，因为它们可以并发"调度"许多程序（**warp**）（每个 SM 最多 64 个）但每个 _Warp 调度器_ 在每个时钟周期只执行一个程序。<d-footnote>调度在给定 SM 上的 warp 被称为"常驻"。</d-footnote> Warp 调度器自动在活跃 warp 之间切换以隐藏 I/O 操作如内存加载。相比之下，TPU 通常是单线程的。
 
-### Memory
+### 内存
 
-Beyond the compute units, GPUs have a hierarchy of memories, the largest being HBM (the main GPU memory), and then a series of smaller caches (L2, L1/SMEM, TMEM, register memory).
+除了计算单元，GPU 有一个内存层级，最大的是 HBM（主 GPU 内存），然后是一系列更小的缓存（L2、L1/SMEM、TMEM、寄存器内存）。
 
-* **Registers:** Each subpartition has its own register file containing 16,384 32-bit words on H100/B200 (`4 * 16384 * 4 = 256kiB` per SM) accessible by the CUDA cores.
-  * Each CUDA core can only access up to 256 registers at a time, so although we can schedule up to 64 "resident warps" per SM, you can only fit 8 (`256 * 1024 / (4 * 32 * 256)`) at a time if each thread uses 256 registers.
+* **寄存器：** 每个子分区有自己的寄存器文件，在 H100/B200 上包含 16,384 个 32 位字（每个 SM `4 * 16384 * 4 = 256kiB`），可由 CUDA 核心访问。
+  * 每个 CUDA 核心一次最多只能访问 256 个寄存器，所以尽管我们可以每个 SM 调度最多 64 个"常驻 warp"，如果每个线程使用 256 个寄存器，你一次只能容纳 8 个（`256 * 1024 / (4 * 32 * 256)`）。
 
-* **SMEM (L1 Cache):** each SM has its own 256kB on-chip cache called SMEM, which can either be programmer controlled as "shared memory" or used by the hardware as an on-chip cache. SMEM is used for storing activations and inputs to TC matmuls.
+* **SMEM (L1 缓存)：** 每个 SM 有自己的 256kB 片上缓存叫 SMEM，可以由程序员控制为"共享内存"或由硬件用作片上缓存。SMEM 用于存储激活和 TC matmul 的输入。
 
-* **L2 Cache:** all SMs share<d-footnote>Technically, the L2 cache is split in two, so half the SMs can access 25MB a piece on an H100. There is a link connecting the two halves, but at lower bandwidth.</d-footnote> a relatively large ~50MB L2 cache used to reduce main memory accesses.
-  * This is similar in size to a TPU’s VMEM but it’s **much** slower and isn’t programmer controlled. This leads to a bit of "spooky action at a distance" where the programmer needs to modify memory access patterns to ensure the L2 cache is well used.<d-footnote>The fact that the L2 cache is shared across all SMs effectively forces the programmer to run the SMs in a fairly coordinated way anyway, despite the fact that, in principle, they are independent units.</d-footnote>
-  * NVIDIA does not publish the L2 bandwidth for their chips, but it’s been [measured](https://chipsandcheese.com/p/nvidias-h100-funny-l2-and-tons-of-bandwidth) to be about 5.5TB/s. Thus is roughly 1.6x the HBM bandwidth but it's full-duplex, so the effective bidirectional bandwidth is closer to 3x. By comparison, a TPU’s VMEM is 2x larger *and* has much more bandwidth (around 40TB/s).
+* **L2 缓存：** 所有 SM 共享<d-footnote>技术上，L2 缓存分成两半，所以一半的 SM 在 H100 上每个可以访问 25MB。有一条链接连接两半，但带宽较低。</d-footnote>一个相对较大的约 50MB L2 缓存，用于减少主内存访问。
+  * 这与 TPU 的 VMEM 大小相似，但它**慢得多**并且不由程序员控制。这导致一点"幽灵作用于远处"，程序员需要修改内存访问模式以确保 L2 缓存被良好使用。<d-footnote>L2 缓存在所有 SM 之间共享这一事实有效地迫使程序员以相当协调的方式运行 SM，尽管原则上它们是独立的单元。</d-footnote>
+  * NVIDIA 不公布其芯片的 L2 带宽，但它已被[测量](https://chipsandcheese.com/p/nvidias-h100-funny-l2-and-tons-of-bandwidth)为约 5.5TB/s。因此这大约是 HBM 带宽的 1.6 倍，但它是全双工的，所以有效的双向带宽接近 3 倍。相比之下，TPU 的 VMEM 大 2 倍*并且*有更多带宽（约 40TB/s）。
 
-* **HBM:** the main GPU memory, used for storing model weights, gradients, activations, etc.
-  * The HBM size has increased a lot from 32GB in Volta to 192GB in Blackwell (B200).
-  * The bandwidth from HBM to the CUDA Tensor Core is called HBM bandwidth or memory bandwidth, and is about 3.35TB/s on H100 and 9TB/s on B200.
+* **HBM：** 主 GPU 内存，用于存储模型权重、梯度、激活等。
+  * HBM 大小从 Volta 的 32GB 大幅增加到 Blackwell（B200）的 192GB。
+  * 从 HBM 到 CUDA Tensor Core 的带宽称为 HBM 带宽或内存带宽，在 H100 上约为 3.35TB/s，在 B200 上约为 9TB/s。
 
-### Summary of GPU specs
+### GPU 规格概览
 
-Here is a summary of GPU specs for recent models. The number of SMs, clock speed, and FLOPs differ somewhat between variants of a given GPU. Here are memory capacity numbers:
+这是近期型号的 GPU 规格概览。SM 数量、时钟速度和 FLOPs 在给定 GPU 的变体之间略有不同。这是内存容量数字：
 
-|  GPU  | Generation |   Clock Speed   | SMs/chip | SMEM capacity/SM | L2 capacity/chip | HBM capacity/chip |
+|  GPU  | 代次 |   时钟速度   | SM/芯片 | SMEM 容量/SM | L2 容量/芯片 | HBM 容量/芯片 |
 | :---: | :--------: | :-------------: | :------: | :--------------: | :--------------: | :---------------: |
 | V100  |   Volta    | 1.25GHz/1.38HGz |    80    |       96kB       |       6MB        |       32GB        |
 | A100  |   Ampere   | 1.10GHz/1.41GHz |   108    |      192kB       |       40MB       |       80GB        |
@@ -148,9 +149,9 @@ Here is a summary of GPU specs for recent models. The number of SMs, clock speed
 | H200  |   Hopper   | 1.59GHz/1.98GHz |   132    |      256kB       |       50MB       |       141GB       |
 | B200  | Blackwell  |        ?        |   148    |      256kB       |      126MB       |       192GB       |
 
-All generations have 256kB of register memory per SM. Blackwell adds 256kB of TMEM per SM as well. Here are the FLOPs and bandwidth numbers for each chip:
+所有代次每 SM 有 256kB 寄存器内存。Blackwell 每 SM 还增加了 256kB TMEM。这是每个芯片的 FLOPs 和带宽数字：
 
-|  GPU  | Generation | HBM BW/chip | FLOPs/s/chip (bf16/fp16) | FLOPs/s/chip (fp8/int8) | FLOPs/s/chip (fp4) |
+|  GPU  | 代次 | HBM 带宽/芯片 | FLOPs/s/芯片 (bf16/fp16) | FLOPs/s/芯片 (fp8/int8) | FLOPs/s/芯片 (fp4) |
 | :---: | :--------: | :---------: | :----------------------: | :---------------------: | :----------------: |
 | V100  |   Volta    |   9.0e11    |            —             |            —            |         —          |
 | A100  |   Ampere   |   2.0e12    |          3.1e14          |         6.2e14          |         —          |
@@ -158,717 +159,679 @@ All generations have 256kB of register memory per SM. Blackwell adds 256kB of TM
 | H200  |   Hopper   |   4.8e12    |          9.9e14          |         2.0e15          |         —          |
 | B200  | Blackwell  |   8.0e12    |          2.3e15          |         4.5e15          |       9.0e15       |
 
-We exclude B100 since it wasn't mass-produced.<d-footnote>While NVIDIA made a B100 generation, they were only briefly sold and produced, allegedly due to design flaws that prevented them from running close to their claimed specifications. They struggled to achieve peak FLOPs without throttling due to heat and power concerns.</d-footnote> Some specs depend slightly on the precise version of the GPU, since NVIDIA GPUs aren’t as standard as TPUs.
+我们排除 B100，因为它没有量产。<d-footnote>虽然 NVIDIA 做了 B100 代，但它们只是短暂销售和生产，据说是由于设计缺陷阻止它们接近其声称的规格运行。由于热量和功率问题，它们努力在不节流的情况下实现峰值 FLOPs。</d-footnote> 一些规格根据 GPU 的精确版本略有不同，因为 NVIDIA GPU 不如 TPU 标准化。
 
-Here’s a helpful cheat sheet comparing GPU and TPU components:
+这是比较 GPU 和 TPU 组件的有用备忘单：
 
-|              GPU              |     TPU     |              What is it?              |
+|              GPU              |     TPU     |              这是什么？              |
 | :---------------------------: | :---------: | :-----------------------------------: |
-| Streaming Multiprocessor (SM) | Tensor Core | Core "cell" that contains other units |
-|        Warp Scheduler         |     VPU     |      SIMD vector arithmetic unit      |
-|           CUDA Core           |   VPU ALU   |               SIMD ALU                |
-|        SMEM (L1 Cache)        |    VMEM     |       Fast on-chip cache memory       |
-|          Tensor Core          |     MXU     |      Matrix multiplication unit       |
-|        HBM (aka GMEM)         |     HBM     |  High bandwidth high capacity memory  |
+| 流式多处理器 (SM) | Tensor Core | 包含其他单元的核心"单元" |
+|        Warp 调度器         |     VPU     |      SIMD 向量算术单元      |
+|           CUDA 核心           |   VPU ALU   |               SIMD ALU                |
+|        SMEM (L1 缓存)        |    VMEM     |       快速片上缓存内存       |
+|          Tensor Core          |     MXU     |      矩阵乘法单元       |
+|        HBM (又名 GMEM)         |     HBM     |  高带宽高容量内存  |
 
-### GPUs vs. TPUs at the chip level
+### GPU 与 TPU 在芯片级别的对比
 
-GPUs started out rendering video games, but since deep learning took off in the 2010s, they've started acting more and more like dedicated matrix multiplication machines – in other words, more like TPUs.<d-footnote>Before the deep learning boom, GPUs ("Graphics Processing Units") did, well, graphics – mostly for video games. Video games represent objects with millions of little triangles, and the game renders (or "rasterizes") these triangles into a 2D image that gets displayed on a screen 30-60 times a second (this frequency is called the framerate). Rasterization involves projecting these triangles into the coordinate frame of the camera and calculating which triangles overlap which pixels, billions of times a second. As you can imagine, this is very expensive, and it’s just the beginning. You then have to color each pixel by combining the colors of possibly several semi-opaque triangles that intersect the ray. GPUs were designed to do these operations extremely fast, with an eye towards versatility; you need to run many different GPU workloads (called "shaders") at the same time, with no single operation dominating. As a result, consumer graphics-focused GPUs can do matrix multiplication, but it’s not their primary function.</d-footnote> To an extent, this history explains why modern GPUs look the way they do. They weren't designed purely for LLMs or ML models but as general-purpose accelerators, and the hardware aims for level of "generality" that can be both a blessing and a curse. GPUs much more often "just work" when applied to new tasks and lean far less on a good compiler than TPUs do. But this also makes them much harder to reason about or get roofline performance out of, since so many compiler features can cause bottlenecks.
+GPU 最初是渲染视频游戏的，但自从深度学习在 2010 年代起飞以来，它们开始越来越像专用的矩阵乘法机器——换句话说，更像 TPU。<d-footnote>在深度学习繁荣之前，GPU（"图形处理单元"）做的是图形——主要是视频游戏。视频游戏用数百万个小三角形表示对象，游戏每秒 30-60 次将这些三角形渲染（或"光栅化"）成显示在屏幕上的 2D 图像（这个频率称为帧率）。光栅化涉及将这些三角形投影到相机的坐标框架中，并计算哪些三角形与哪些像素重叠，每秒数十亿次。正如你可以想象的，这非常昂贵，而且这只是开始。然后你必须通过组合可能与光线相交的几个半透明三角形的颜色来给每个像素着色。GPU 被设计为极快地做这些操作，着眼于多功能性；你需要同时运行许多不同的 GPU 工作负载（称为"着色器"），没有单一操作占主导地位。因此，消费者以图形为重点的 GPU 可以做矩阵乘法，但这不是它们的主要功能。</d-footnote> 在某种程度上，这段历史解释了为什么现代 GPU 看起来是这样。它们不是纯粹为 LLM 或 ML 模型设计的，而是作为通用加速器，硬件旨在达到一种"通用性"水平，这既可能是福也可能是祸。GPU 在应用于新任务时更经常"直接工作"，比 TPU 更不依赖好的编译器。但这也使它们更难推理或获得 roofline 性能，因为太多编译器特性可能导致瓶颈。
 
-**GPUs are more modular.** TPUs have 1-2 big Tensor Cores, while GPUs have hundreds of small SMs. Likewise, each Tensor Core has 4 big VPU with 1024 ALUs each, while GPUs have an H100 has 132 * 4 = 528 small independent SIMD units. Here is a 1:1 comparison of GPUs to TPU that highlights this point:
+**GPU 更模块化。** TPU 有 1-2 个大 Tensor Core，而 GPU 有数百个小 SM。同样，每个 Tensor Core 有 4 个大 VPU，每个有 1024 个 ALU，而 H100 GPU 有 132 * 4 = 528 个小的独立 SIMD 单元。这是突出这一点的 GPU 与 TPU 1:1 对比：
 
 |              GPU              |           TPU            | H100 # | TPU v5p # |
 | :---------------------------: | :----------------------: | :----: | :-------: |
-| SM (streaming multiprocessor) |       Tensor Core        |  132   |     2     |
-|        Warp Scheduler         |           VPU            |  528   |     8     |
-|        SMEM (L1 cache)        |           VMEM           |  32MB  |   128MB   |
-|           Registers           | Vector Registers (VRegs) |  32MB  |   256kB   |
+| SM (流式多处理器) |       Tensor Core        |  132   |     2     |
+|        Warp 调度器         |           VPU            |  528   |     8     |
+|        SMEM (L1 缓存)        |           VMEM           |  32MB  |   128MB   |
+|           寄存器           | 向量寄存器 (VRegs) |  32MB  |   256kB   |
 |          Tensor Core          |           MXU            |  528   |     8     |
 
-This difference in modularity on the one hand makes TPUs much cheaper to build and simpler to understand, but it also puts more burden on the compiler to do the right thing. Because TPUs have a single thread of control and only support vectorized VPU-wide instructions, the compiler needs to manually pipeline all memory loads and MXU/VPU work to avoid stalls. A GPU programmer can just launch dozens of different kernels, each running on a totally independent SM. On the other hand, those kernels might get horrible performance because they are thrashing the L2 cache or failing to coalesce memory loads; because the hardware controls so much of the runtime, it becomes hard to reason about what’s going on behind the scenes. As a result, TPUs can often get closer to peak roofline performance with less work.
+模块化方面的这种差异一方面使 TPU 构建更便宜、更容易理解，但它也给编译器做正确的事情带来更多负担。因为 TPU 有单线程控制并且只支持向量化 VPU 宽度的指令，编译器需要手动流水线化所有内存加载和 MXU/VPU 工作以避免停顿。GPU 程序员可以只是启动几十个不同的内核，每个在完全独立的 SM 上运行。另一方面，那些内核可能会获得糟糕的性能，因为它们在抖动 L2 缓存或未能合并内存加载；因为硬件控制太多运行时，变得难以推理幕后发生了什么。因此，TPU 通常可以用更少的工作更接近峰值 roofline 性能。
 
-**Historically, individual GPUs are more powerful (and more expensive) than a comparable TPU:** A single H200 has close to 2x the FLOPs/s of a TPU v5p and 1.5x the HBM. At the same time, the sticker price on Google Cloud is around \\$10/hour for an H200 compared to \\$4/hour for a TPU v5p. TPUs generally rely more on networking multiple chips together than GPUs.
+**历史上，单个 GPU 比同类 TPU 更强大（也更昂贵）：** 单个 H200 的 FLOPs/s 接近 TPU v5p 的 2 倍，HBM 是 1.5 倍。同时，Google Cloud 上的标价约为 H200 每小时 $10，而 TPU v5p 为每小时 $4。TPU 通常更依赖于将多个芯片联网在一起。
 
-**TPUs have a lot more fast cache memory.** TPUs also have a lot more VMEM than GPUs have SMEM (+TMEM), and this memory can be used for storing weights and activations in a way that lets them be loaded and used extremely fast. This can make them faster for LLM inference if you can consistently store or prefetch model weights into VMEM.
+**TPU 有更多快速缓存内存。** TPU 的 VMEM 也比 GPU 的 SMEM（+TMEM）多得多，这种内存可以用于存储权重和激活，使它们可以被极快地加载和使用。如果你可以一致地将模型权重存储或预取到 VMEM，这可以使它们在 LLM 推理中更快。
 
-### Quiz 1: GPU hardware
+### 测验 1：GPU 硬件
 
-Here are some problems to work through that test some of the content above. Answers are provided, but it’s probably a good idea to try to answer the questions before looking, pen and paper in hand.
+这里有一些问题来测试上面的一些内容。提供了答案，但在查看之前尝试回答问题，手边有纸笔，可能是个好主意。
 
-**Question 1 [CUDA cores]:** How many fp32 CUDA cores (ALUs) does an H100 have? B200? How does this compare to the number of independent ALUs in a TPU v5p?
+**问题 1 [CUDA 核心]：** H100 有多少 fp32 CUDA 核心（ALU）？B200 呢？这与 TPU v5p 中独立 ALU 的数量相比如何？
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** An H100 has 132 SMs with 4 subpartitions each containing 32 fp32 CUDA cores, so we `132 * 4 * 32 = 16896` CUDA cores. A B200 has has `148` SMs, so a total of `18944`. A TPU v5p has 2 TensorCores (usually connected via Megacore), each with a VPU with (8, 128) lanes and 4 independent ALUs per lane, so `2 * 4 * 8 * 128 = 8192` ALUs. This is roughly half the number of vector lanes of an H100, running at roughly the same frequency.
-
-{% enddetails %}
-
-**Question 2 [Vector FLOPs calculation]**: A single H100 has 132 SMs and runs at a clock speed of 1.59GHz (up to 1.98GHz boost). Assume it can do one vector op per cycle per ALU. How many vector fp32 FLOPs can be done per second? With boost? How does this compare to matmul FLOPs?
-
-{% details Click here for the answer. %}
-
-**Answer:** `132 * 4 * 32 * 1.59e9 = 26.9TFLOPs/s`. With boost its 33.5 TFLOPs/s. This is half what’s reported in the [spec sheet](https://www.nvidia.com/en-us/data-center/h100/) because technically we can do an FMA (fused-multiply-add) in one cycle which counts as two FLOPs, but this isn't useful in most cases. We can do 990 bfloat16 matmul TFLOPs/s, so ignoring FMAs, Tensor Cores do around 30x more FLOPs/s.
+**答案：** H100 有 132 个 SM，每个有 4 个子分区，每个包含 32 个 fp32 CUDA 核心，所以我们有 `132 * 4 * 32 = 16896` 个 CUDA 核心。B200 有 `148` 个 SM，所以总共 `18944` 个。TPU v5p 有 2 个 TensorCore（通常通过 Megacore 连接），每个有一个 VPU，有 (8, 128) 个通道，每个通道有 4 个独立 ALU，所以 `2 * 4 * 8 * 128 = 8192` 个 ALU。这大约是 H100 向量通道数量的一半，运行频率大致相同。
 
 {% enddetails %}
 
-**Question 3 [GPU matmul intensity]:** What is the peak fp16 matmul intensity on an H100? A B200? What about fp8? *By intensity we mean the ratio of matmul FLOPs/s to memory bandwidth.*
+**问题 2 [向量 FLOPs 计算]**：单个 H100 有 132 个 SM，运行时钟速度为 1.59GHz（最高 1.98GHz boost）。假设每个 ALU 每周期可以做一个向量操作。每秒可以做多少向量 fp32 FLOPs？使用 boost 呢？这与 matmul FLOPs 相比如何？
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** For an H100, we have a peak 990e12 fp16 FLOPs and 3.35e12 bytes / s of bandwidth. So the critical intensity is `990e12 / 3.35e12 = 295`, fairly similar to the 240 in a TPU. For B200 its `2250e12 / 8e12 = 281`, very similar. This means, similar to TPUs, that we need a batch size of around 280 to be compute-bound in a matmul.
-
-For both H100 and B200 we have exactly 2x fp8 FLOPs, so the peak intensity also doubles to 590 and 562 respectively, although in some sense it stays constant if we take into account the fact that our weights will likely be loaded in fp8 as well.
+**答案：** `132 * 4 * 32 * 1.59e9 = 26.9TFLOPs/s`。使用 boost 是 33.5 TFLOPs/s。这是[规格表](https://www.nvidia.com/en-us/data-center/h100/)中报告的一半，因为技术上我们可以在一个周期内做一个 FMA（融合乘加），算作两个 FLOPs，但这在大多数情况下没用。我们可以做 990 bfloat16 matmul TFLOPs/s，所以忽略 FMA，Tensor Core 做约 30 倍更多的 FLOPs/s。
 
 {% enddetails %}
 
-**Question 4 [Matmul runtime]:** Using the answer to Question 3, how long would you expect an `fp16[64, 4096] * fp16[4096, 8192]` matmul to take on a single B200? How about `fp16[512, 4096] * fp16[4096, 8192]`?
+**问题 3 [GPU matmul 强度]：** H100 上的峰值 fp16 matmul 强度是多少？B200 呢？fp8 呢？*强度指的是 matmul FLOPs/s 与内存带宽的比率。*
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-From the above, we know we'll be communication-bound below a batch size of 281 tokens. Thus the first is purely bandwidth bound. We read or write $2BD + 2DF + 2BF$ bytes (`2*64*4096 + 2*4096*8192 + 2*64*8192=69e6`) with `8e12` bytes/s of bandwidth, so it will take about `69e6 / 8e12 = 8.6us`. In practice we likely get a fraction of the total bandwidth, so it may take closer to 10-12us. When we increase the batch size, we're fully compute-bound, so we expect `T=2*512*4096*8192/2.3e15=15us`. We again only expect a fraction of the total FLOPs, so we may see closer to 20us.
+**答案：** 对于 H100，我们有峰值 990e12 fp16 FLOPs 和 3.35e12 字节/秒的带宽。所以临界强度是 `990e12 / 3.35e12 = 295`，与 TPU 的 240 相当相似。对于 B200 是 `2250e12 / 8e12 = 281`，非常相似。这意味着，与 TPU 类似，我们需要约 280 的批次大小才能在 matmul 中是计算受限的。
 
-{% enddetails %}
-
-**Question 5 [L1 cache capacity]:** What is the total L1/SMEM capacity for an H100? What about register memory? How does this compare to TPU VMEM capacity?
-
-{% details Click here for the answer. %}
-
-**Answer:** We have 256kB SMEM and 256kB of register memory per SM, so about 33MB (`132 * 256kB`) of each. Together, this gives us a total of about 66MB. This is about half the 120MB of a modern TPU’s VMEM, although a TPU only has 256kB of register memory total! TPU VMEM latency is lower than SMEM latency, which is one reason why register memory on TPUs is not that crucial (spills and fills to VMEM are cheap).
+对于 H100 和 B200，我们都有正好 2x fp8 FLOPs，所以峰值强度也加倍到 590 和 562，尽管在某种意义上如果我们考虑到我们的权重可能也以 fp8 加载，它保持不变。
 
 {% enddetails %}
 
-**Question 6 [Calculating B200 clock frequency]:** NVIDIA reports [here](https://resources.nvidia.com/en-us-blackwell-architecture) that a B200 can perform 80TFLOPs/s of vector fp32 compute. Given that each CUDA core can perform 2 FLOPs/cycle in a FMA (fused multiply add) op, estimate the peak clock cycle.
+**问题 4 [Matmul 运行时间]：** 使用问题 3 的答案，你预期单个 B200 上 `fp16[64, 4096] * fp16[4096, 8192]` matmul 需要多长时间？`fp16[512, 4096] * fp16[4096, 8192]` 呢？
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** We know we have 148 * 4 * 32 = 18944 CUDA cores, so we can do `18944 * 2 = 37888 FLOPs / cycle`. Therefore `80e12 / 37888 = 2.1GHz`, a high but reasonable peak clock speed. B200s are generally liquid cooled, so the higher clock cycle is more reasonable.
+从上面，我们知道在批次大小 281 个 token 以下我们将是通信受限的。因此第一个是纯粹带宽受限的。我们读取或写入 $2BD + 2DF + 2BF$ 字节（`2*64*4096 + 2*4096*8192 + 2*64*8192=69e6`），带宽为 `8e12` 字节/秒，所以大约需要 `69e6 / 8e12 = 8.6us`。实际上我们可能只获得总带宽的一部分，所以可能接近 10-12us。当我们增加批次大小时，我们是完全计算受限的，所以我们预期 `T=2*512*4096*8192/2.3e15=15us`。我们同样只预期获得总 FLOPs 的一部分，所以我们可能看到接近 20us。
 
 {% enddetails %}
 
-**Question 7 [Estimating H100 add runtime]:** Using the figures above, calculate how long it ought to take to add two `fp32[N]` vectors together on a single H100. Calculate both $T_\text{math}$ and $T_\text{comms}$. What is the arithmetic intensity of this operation? If you can get access, try running this operation in PyTorch or JAX as well for `N = 1024` and `N=1024 * 1024 * 1024`. How does this compare?
+**问题 5 [L1 缓存容量]：** H100 的总 L1/SMEM 容量是多少？寄存器内存呢？这与 TPU VMEM 容量相比如何？
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** Firstly, adding two `fp32[N]` vectors performs N FLOPs and requires `4 * N * 2` bytes to be loaded and 4 * N bytes to be written back, for a total of `3 * 4 * N = 12N`. Computing their ratio, we have `total FLOPs / total bytes = N / 12N = 1 / 12`, which is pretty abysmal.
+**答案：** 我们每 SM 有 256kB SMEM 和 256kB 寄存器内存，所以每个约 33MB（`132 * 256kB`）。一起，这给我们总共约 66MB。这大约是现代 TPU 120MB VMEM 的一半，尽管 TPU 总共只有 256kB 寄存器内存！TPU VMEM 延迟比 SMEM 延迟低，这是 TPU 上寄存器内存不那么关键的一个原因（溢出和填充到 VMEM 很便宜）。
 
-As we calculated above, we can do roughly 33.5 TFLOPs/s boost, ignoring FMA. This is only if all CUDA cores are used. For `N = 1024`, we can only use *at most* 1024 CUDA cores or 8 SMs, which will take longer (roughly 16x longer assuming we’re compute-bound). We also have a memory bandwidth of 3.35e12 bytes/s. Thus our peak hardware intensity is `33.5e12 / 3.35e12 = 10`.<d-footnote>It’s notable that this intensity stays constant across recent GPU generations. For H100s it’s 33.5 / 3.5 and for B200 it’s 80 / 8. Why this is isn’t clear, but it’s an interesting observation.</d-footnote> So we’re going to be horribly comms bound. Thus our runtime is just
+{% enddetails %}
+
+**问题 6 [计算 B200 时钟频率]：** NVIDIA [在这里](https://resources.nvidia.com/en-us-blackwell-architecture)报告 B200 可以执行 80TFLOPs/s 的向量 fp32 计算。假设每个 CUDA 核心在 FMA（融合乘加）操作中每周期可以执行 2 个 FLOPs，估计峰值时钟周期。
+
+{% details 点击这里查看答案。 %}
+
+**答案：** 我们知道我们有 148 * 4 * 32 = 18944 个 CUDA 核心，所以我们每周期可以做 `18944 * 2 = 37888 FLOPs`。因此 `80e12 / 37888 = 2.1GHz`，一个高但合理的峰值时钟速度。B200 通常是液冷的，所以更高的时钟周期更合理。
+
+{% enddetails %}
+
+**问题 7 [估计 H100 加法运行时间]：** 使用上面的数字，计算在单个 H100 上将两个 `fp32[N]` 向量加在一起应该需要多长时间。计算 $T_\text{math}$ 和 $T_\text{comms}$。这个操作的算术强度是多少？如果你可以访问，也尝试在 PyTorch 或 JAX 中运行这个操作，用于 `N = 1024` 和 `N=1024 * 1024 * 1024`。这相比如何？
+
+{% details 点击这里查看答案。 %}
+
+**答案：** 首先，将两个 `fp32[N]` 向量相加执行 N 个 FLOPs，需要加载 `4 * N * 2` 字节并写回 4 * N 字节，总共 `3 * 4 * N = 12N`。计算它们的比率，我们有 `总 FLOPs / 总字节 = N / 12N = 1 / 12`，这相当糟糕。
+
+如上所述，忽略 FMA 我们可以做大约 33.5 TFLOPs/s boost。这只有在所有 CUDA 核心都被使用时才成立。对于 `N = 1024`，我们*最多*只能使用 1024 个 CUDA 核心或 8 个 SM，这将需要更长时间（假设我们是计算受限的，大约长 16 倍）。我们还有 3.35e12 字节/秒的内存带宽。因此我们的峰值硬件强度是 `33.5e12 / 3.35e12 = 10`。<d-footnote>值得注意的是，这个强度在最近的 GPU 代次中保持不变。对于 H100 是 33.5 / 3.5，对于 B200 是 80 / 8。为什么不清楚，但这是一个有趣的观察。</d-footnote> 所以我们将是可怕地通信受限的。因此我们的运行时间只是
 
 $$T = \max(T_\text{comms}, T_\text{math}) = \frac{12 \cdot N}{\text{3.35e12}} = \frac{N}{\text{2.8e11}}$$
 
-For `N = 65,536`, this is about 0.23us. In practice we see a runtime of about 1.5us in JAX, which is fine because we expect to be super latency bound here. For `N = 1024 * 1024 * 1024`, we have a roofline of about 3.84ms, and we see 4.1ms, which is good!
+对于 `N = 65,536`，这大约是 0.23us。实际上我们在 JAX 中看到大约 1.5us 的运行时间，这很好因为我们预期在这里是超级延迟受限的。对于 `N = 1024 * 1024 * 1024`，我们有约 3.84ms 的 roofline，我们看到 4.1ms，这很好！
 
 {% enddetails %}
 
-## Networking
+## 网络
 
-Networking is one of the areas where GPUs and TPUs differ the most. As we’ve seen, TPUs are connected in 2D or 3D tori, where each TPU is only connected to its neighbors. This means sending a message between two TPUs must pass through every intervening TPU, and forces us to use only uniform communication patterns over the mesh. While inconvenient in some respects, this also means the number of links per TPU is constant and we can scale to arbitrarily large TPU "pods" without loss of bandwidth.
+网络是 GPU 和 TPU 差异最大的领域之一。正如我们所见，TPU 以 2D 或 3D 环面连接，每个 TPU 只连接到其邻居。这意味着在两个 TPU 之间发送消息必须通过每个中间的 TPU，并迫使我们只在网格上使用均匀的通信模式。虽然在某些方面不方便，但这也意味着每个 TPU 的链接数量是恒定的，我们可以扩展到任意大的 TPU "pod"而不损失带宽。
 
-GPUs on the other hand use a more traditional hierarchical tree-based switching network. Sets of 8 GPUs called **nodes** (up to 72 for GB200<d-footnote>The term node is overloaded and can mean two things: the NVLink domain, aka the set of GPUs fully connected over NVLink interconnects, or the set of GPUs connected to a single CPU host. Before B200, these were usually the same, but in GB200 NVL72, we have an NVLink domain with 72 GPUs but still only 8 GPUs connected to each host. We use the term node here to refer to the NVLink domain, but this is controversial.</d-footnote>) are connected within 1 hop of each other using high-bandwidth interconnects called NVLinks, and these nodes are connected into larger units (called **SUs** or Scalable Units) with a lower bandwidth InfiniBand (IB) or Ethernet network using NICs attached to each GPU. These in turn can be connected into arbitrarily large units with higher level switches.
+另一方面，GPU 使用更传统的分层树状交换网络。称为**节点**的 8 个 GPU 组（GB200 最多 72 个<d-footnote>节点一词是重载的，可以指两件事：NVLink 域，即通过 NVLink 互连完全连接的 GPU 集合，或连接到单个 CPU 主机的 GPU 集合。在 B200 之前，这些通常是相同的，但在 GB200 NVL72 中，我们有一个 72 个 GPU 的 NVLink 域，但仍然只有 8 个 GPU 连接到每个主机。我们在这里使用节点一词指 NVLink 域，但这是有争议的。</d-footnote>）使用称为 NVLink 的高带宽互连在 1 跳内相互连接，这些节点使用附加到每个 GPU 的 NIC 通过较低带宽的 InfiniBand (IB) 或以太网网络连接成更大的单元（称为 **SU** 或可扩展单元）。这些反过来可以通过更高级别的交换机连接成任意大的单元。
 
-{% include figure.liquid path="assets/gpu/superpod-diagram.png" class="img-fluid" caption="<b>Figure:</b> a diagram showing a typical H100 network. A set of 8 GPUs is connected into a node or NVLink domain with NVSwitches (also called NVLink switches), and these nodes are connected to each other with a switched InfiniBand fabric. H100s have about 450GB/s of egress bandwidth each in the NVLink domain, and each node has 400GB/s of egress bandwidth into the IB network." %}
+{% include figure.liquid path="assets/gpu/superpod-diagram.png" class="img-fluid" caption="<b>图：</b>显示典型 H100 网络的图示。一组 8 个 GPU 通过 NVSwitch（也称为 NVLink 交换机）连接成节点或 NVLink 域，这些节点通过交换的 InfiniBand 结构相互连接。H100 在 NVLink 域中每个有约 450GB/s 的出口带宽，每个节点有 400GB/s 的出口带宽进入 IB 网络。" %}
 
-### At the node level
+### 节点级别
 
-A GPU node is a small unit, typically of 8 GPUs (up to 72 for GB200), connected with all-to-all, full-bandwidth, low latency NVLink interconnects.<d-footnote>NVLink has been described to me as something like a souped-up PCIe connection, with low latency and protocol overhead but not designed for scalability/fault tolerance, while InfiniBand is more like Ethernet, designed for larger lossy networks.</d-footnote> Each node contains several high-bandwidth NVSwitches which switch packets between all the local GPUs. The actual node-level topology has changed quite a bit over time, including the number of switches per node, but for H100, we have 4 NVSwitches per node with GPUs connected to them in a `5 + 4 + 4 + 5` link pattern, as shown:
+GPU 节点是一个小单元，通常是 8 个 GPU（GB200 最多 72 个），通过全对全、全带宽、低延迟的 NVLink 互连连接。<d-footnote>NVLink 被描述为类似于加强版 PCIe 连接，延迟和协议开销低但不是为可扩展性/容错设计的，而 InfiniBand 更像以太网，为更大的有损网络设计。</d-footnote> 每个节点包含几个高带宽 NVSwitch，在所有本地 GPU 之间交换数据包。实际的节点级拓扑随时间变化很大，包括每个节点的交换机数量，但对于 H100，我们每个节点有 4 个 NVSwitch，GPU 以 `5 + 4 + 4 + 5` 链接模式连接到它们，如图所示：
 
-{% include figure.liquid path="assets/gpu/nvlink-nodes.png" class="img-fluid" caption="<b>Figure:</b> node aka NVLink domain diagrams from Pascall (P100) onward. Since Volta (V100), we have had all-to-all connectivity within a node using a set of switches. The H100 node has 4 NVSwitches connected to all 8 GPUs with 25GB/s links." %}
+{% include figure.liquid path="assets/gpu/nvlink-nodes.png" class="img-fluid" caption="<b>图：</b>从 Pascal (P100) 开始的节点又名 NVLink 域图示。自 Volta (V100) 以来，我们使用一组交换机在节点内具有全对全连接。H100 节点有 4 个 NVSwitch，通过 25GB/s 链接连接到所有 8 个 GPU。" %}
 
-For the Hopper generation (NVLink 4.0), each NVLink link has 25GB/s of full-duplex<d-footnote>Full-duplex here means 25GB/s each way, with both directions independent of each other. You can send a total of 50GB/s over the link, but at most 25GB/s in each direction.</d-footnote> bandwidth (50GB/s for B200), giving us `18 * 25=450GB/s` of full-duplex bandwidth from each GPU into the network. The massive NVSwitches have up to 64 NVLink ports, meaning an 8xH100 node with 4 switches can handle up to `64 * 25e9 * 4=6.4TB/s` of bandwidth. Here’s an overview of how these numbers have changed with GPU generation:
+对于 Hopper 代（NVLink 4.0），每个 NVLink 链接有 25GB/s 的全双工<d-footnote>这里全双工意味着每个方向 25GB/s，两个方向彼此独立。你可以在链接上发送总共 50GB/s，但每个方向最多 25GB/s。</d-footnote>带宽（B200 为 50GB/s），给我们从每个 GPU 进入网络的 `18 * 25=450GB/s` 全双工带宽。巨大的 NVSwitch 有多达 64 个 NVLink 端口，意味着带有 4 个交换机的 8xH100 节点可以处理多达 `64 * 25e9 * 4=6.4TB/s` 的带宽。这是这些数字如何随 GPU 代次变化的概述：
 
-| NVLink Gen | NVSwitch Gen | GPU Generation | NVLink Bandwidth (GB/s, full-duplex) | NVLink Ports / GPU | Node GPU to GPU bandwidth (GB/s full-duplex) | Node size (NVLink domain) | NVSwitches per node |
+| NVLink 代 | NVSwitch 代 | GPU 代次 | NVLink 带宽 (GB/s，全双工) | NVLink 端口 / GPU | 节点 GPU 到 GPU 带宽 (GB/s 全双工) | 节点大小 (NVLink 域) | 每节点 NVSwitch |
 | :--------: | :----------: | :------------: | :----------------------------------: | :----------------: | :------------------------------------------: | :-----------------------: | :-----------------: |
 |  **3.0**   |   **2.0**    |     Ampere     |                  25                  |         12         |                     300                      |             8             |          6          |
 |  **4.0**   |   **3.0**    |     Hopper     |                  25                  |         18         |                     450                      |             8             |          4          |
 |  **5.0**   |   **4.0**    |   Blackwell    |                  50                  |         18         |                     900                      |           8/72            |        2/18         |
 
-Blackwell (B200) has nodes of 8 GPUs. GB200NVL72 support larger NVLink domains of 72 GPUs. We show details for both the 8 and 72 GPUs systems.
+Blackwell (B200) 有 8 个 GPU 的节点。GB200NVL72 支持更大的 72 个 GPU 的 NVLink 域。我们显示 8 和 72 个 GPU 系统的详细信息。
 
-### Quiz 2: GPU nodes
+### 测验 2：GPU 节点
 
-Here are some more Q/A problems on networking. I find these particularly useful to do out, since they make you work through the actual communication patterns.
+这里有一些关于网络的更多问答问题。我发现这些特别有用，因为它们让你思考实际的通信模式。
 
-**Question 1 [Total bandwidth for H100 node]:** How much total bandwidth do we have per node in an 8xH100 node with 4 switches? *Hint:* consider both the NVLink and NVSwitch bandwidth.
+**问题 1 [H100 节点的总带宽]：** 带有 4 个交换机的 8xH100 节点每个节点有多少总带宽？*提示：*考虑 NVLink 和 NVSwitch 带宽。
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** We have Gen4 4xNVSwitches, each with `64 * 25e9=1.6TB/s` of unidirectional bandwidth. That would give us `4 * 1.6e12=6.4e12` bandwidth at the switch level. However, note that each GPU can only handle 450GB/s of unidirectional bandwidth, so that means we have at most `450e9 * 8 = 3.6TB/s` bandwidth. Since this is smaller, the peak bandwidth is 3.6TB/s.
-
-{% enddetails %}
-
-**Question 2 [Bisection bandwidth]**: Bisection bandwidth is defined as the smallest bandwidth available between any even partition of a network. In other words, if split a network into two equal halves, how much bandwidth crosses between the two halves? Can you calculate the bisection bandwidth of an 8x H100 node? *Hint:* bisection bandwidth typically includes flow in both directions.
-
-{% details Click here for the answer. %}
-
-**Answer:** Any even partition will have 4 GPUs in each half, each of which can egress `4 * 450GB/s` to the other half. Taking flow in both directions, this gives us `8 * 450GB/s` of bytes cross the partition, or 3.6TB/s of bisection bandwidth. This is what NVIDIA reports e.g. [here](https://hc34.hotchips.org/assets/program/conference/day2/Network%20and%20Switches/NVSwitch%20HotChips%202022%20r5.pdf).
+**答案：** 我们有 Gen4 4xNVSwitch，每个有 `64 * 25e9=1.6TB/s` 单向带宽。这将给我们在交换机级别 `4 * 1.6e12=6.4e12` 带宽。然而，注意每个 GPU 只能处理 450GB/s 的单向带宽，所以这意味着我们最多有 `450e9 * 8 = 3.6TB/s` 带宽。因为这更小，峰值带宽是 3.6TB/s。
 
 {% enddetails %}
 
-**Question 3 [AllGather cost]**: Given an array of B bytes, how long would a (throughput-bound) AllGather take on an 8xH100 node? Do the math for bf16[D<sub>X</sub>, F] where `D=4096`, `F=65,536`. *It’s worth reading the TPU collectives [section](https://jax-ml.github.io/scaling-book/sharding/) before answering this. Think this through here but we’ll talk much more about collectives next.*
+**问题 2 [二分带宽]**：二分带宽定义为网络任何均匀分区之间可用的最小带宽。换句话说，如果将网络分成两半，两半之间有多少带宽？你能计算 8x H100 节点的二分带宽吗？*提示：*二分带宽通常包括两个方向的流量。
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** Each GPU can egress 450GB/s, and each GPU has $B / N$ bytes (where `N=8`, the node size). We can imagine each node sending its bytes to each of the other $N - 1$ nodes one after the other, leading to a total of (N - 1) turns each with $T_\text{comms} = (B / (N * W_\text{unidirectional}))$, or $T_\text{comms} = (N - 1) * B / (N * W_\text{unidirectional})$. This is approximately $B / (N * W_\text{uni})$ or $B / \text{3.6e12}$, the bisection bandwidth.
-
-For the given array, we have `B=4096 * 65536 * 2=512MB`, so the total time is `536e6 * (8 - 1) / 3.6e12 = 1.04ms`. This could be latency-bound, so it may take longer than this in practice (in practice it takes about 1.5ms).
+**答案：** 任何均匀分区将每半有 4 个 GPU，每个可以出口 `4 * 450GB/s` 到另一半。考虑两个方向的流量，这给我们 `8 * 450GB/s` 字节跨越分区，或 3.6TB/s 二分带宽。这是 NVIDIA 报告的，例如[这里](https://hc34.hotchips.org/assets/program/conference/day2/Network%20and%20Switches/NVSwitch%20HotChips%202022%20r5.pdf)。
 
 {% enddetails %}
 
-## Beyond the node level
+**问题 3 [AllGather 成本]**：给定 B 字节的数组，8xH100 节点上（吞吐量受限的）AllGather 需要多长时间？为 bf16[D<sub>X</sub>, F] 做数学，其中 `D=4096`，`F=65,536`。*在回答这个问题之前值得阅读 TPU 集合操作[章节](https://jax-ml.github.io/scaling-book/sharding/)。在这里仔细思考，但我们接下来会更多地讨论集合操作。*
 
-Beyond the node level, the topology of a GPU network is less standardized. NVIDIA publishes a [reference DGX SuperPod architecture](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-h100/latest/network-fabrics.html) that connects a larger set of GPUs than a single node using InfiniBand, but customers and datacenter providers are free to customize this to their needs.<d-footnote>For instance, Meta trained LLaMA-3 on a datacenter network that differs significantly from this description, using Ethernet, a 3 layer switched fabric, and an oversubscribed switch at the top level.</d-footnote>
+{% details 点击这里查看答案。 %}
 
-Here is a diagram for a reference 1024 GPU H100 system, where each box in the bottom row is a single 8xH100 node with 8 GPUs, 8 400Gbps CX7 NICs (one per GPU), and 4 NVSwitches.
+**答案：** 每个 GPU 可以出口 450GB/s，每个 GPU 有 $B / N$ 字节（其中 `N=8`，节点大小）。我们可以想象每个节点一个接一个地将其字节发送到其他 $N - 1$ 个节点，导致总共 (N - 1) 轮，每轮 $T_\text{comms} = (B / (N * W_\text{unidirectional}))$，或 $T_\text{comms} = (N - 1) * B / (N * W_\text{unidirectional})$。这大约是 $B / (N * W_\text{uni})$ 或 $B / \text{3.6e12}$，二分带宽。
 
-{% include figure.liquid path="assets/gpu/h100-superpod.png" class="img-fluid" caption="<b>Figure:</b> diagram of the reference 1024 H100 DGX SuperPod with 128 nodes (sometimes 127), each with 8 H100 GPUs, connected to an InfiniBand scale-out network. Sets of 32 nodes (256 GPUs) are called 'Scalable Units' or SUs. The leaf and spine IB switches provide enough bandwidth for full bisection bandwidth between nodes." %}
+对于给定的数组，我们有 `B=4096 * 65536 * 2=512MB`，所以总时间是 `536e6 * (8 - 1) / 3.6e12 = 1.04ms`。这可能是延迟受限的，所以实际上可能比这更长（实际上大约需要 1.5ms）。
 
-**Scalable Units:** Each set of 32 nodes is called a "Scalable Unit" (or SU), under a single set of 8 leaf InfiniBand switches. This SU has 256 GPUs with 4 NVSwitches per node and 8 Infiniband leaf switches. All the cabling shown is InfiniBand NDR (50GB/s full-duplex) with 64-port NDR IB switches (also 50GB/s per port). *Note that the IB switches have 2x the bandwidth of the NVSwitches (64 ports with 400 Gbps links).*
+{% enddetails %}
 
-**SuperPod:** The overall SuperPod then connects 4 of these SUs with 16 top level "spine" IB switches, giving us 1024 GPUs with 512 node-level NVSwitches, 32 leaf IB switches, and 16 spine IB switches, for a total of 512 + 32 + 16 = 560 switches. Leaf switches are connected to nodes in sets of 32 nodes, so each set of 256 GPUs has 8 leaf switches. All leaf switches are connected to all spine switches.
+## 超越节点级别
 
-**How much bandwidth do we have?** The overall topology of the InfiniBand network (called the "scale out network") is that of a **fat tree**, with the cables and switches guaranteeing full bisection bandwidth above the node level (here, 400GB/s). That means if we split the nodes in half, each node can egress 400GB/s to a node in the other partition at the same time. More to the point, this means we should have a roughly constant AllReduce bandwidth in the scale out network! While it may not be implemented this way, you can imagine doing a ring reduction over arbitrarily many nodes in the scale-out network, since you can construct a ring including every one.
+超越节点级别，GPU 网络的拓扑不太标准化。NVIDIA 发布了一个[参考 DGX SuperPod 架构](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-h100/latest/network-fabrics.html)，使用 InfiniBand 连接比单个节点更大的 GPU 集合，但客户和数据中心提供商可以根据需要自定义。<d-footnote>例如，Meta 在一个与此描述显著不同的数据中心网络上训练了 LLaMA-3，使用以太网、3 层交换结构和顶级过订阅交换机。</d-footnote>
 
-| Level | GPUs | Switches per Unit | Switch Type | Bandwidth per Unit (TB/s, full-duplex) | GPU-to-GPU Bandwidth (GB/s, full-duplex) | Fat Tree Bandwidth (GB/s, full-duplex) |
+这是参考 1024 GPU H100 系统的图示，底行的每个框是一个单独的 8xH100 节点，有 8 个 GPU、8 个 400Gbps CX7 NIC（每个 GPU 一个）和 4 个 NVSwitch。
+
+{% include figure.liquid path="assets/gpu/h100-superpod.png" class="img-fluid" caption="<b>图：</b>参考 1024 H100 DGX SuperPod 的图示，有 128 个节点（有时 127 个），每个有 8 个 H100 GPU，连接到 InfiniBand 横向扩展网络。每组 32 个节点（256 个 GPU）称为"可扩展单元"或 SU。叶和脊 IB 交换机提供节点之间全二分带宽。" %}
+
+**可扩展单元：** 每组 32 个节点称为"可扩展单元"（或 SU），在一组 8 个叶 InfiniBand 交换机下。这个 SU 有 256 个 GPU，每个节点有 4 个 NVSwitch，8 个 InfiniBand 叶交换机。所有显示的布线是 InfiniBand NDR（50GB/s 全双工），有 64 端口 NDR IB 交换机（也是每端口 50GB/s）。*注意 IB 交换机的带宽是 NVSwitch 的 2 倍（64 端口 400 Gbps 链接）。*
+
+**SuperPod：** 整个 SuperPod 然后用 16 个顶级"脊"IB 交换机连接 4 个这样的 SU，给我们 1024 个 GPU，有 512 个节点级 NVSwitch、32 个叶 IB 交换机和 16 个脊 IB 交换机，总共 512 + 32 + 16 = 560 个交换机。叶交换机以 32 个节点为一组连接到节点，所以每组 256 个 GPU 有 8 个叶交换机。所有叶交换机都连接到所有脊交换机。
+
+**我们有多少带宽？** InfiniBand 网络（称为"横向扩展网络"）的整体拓扑是一棵**胖树**，电缆和交换机保证节点级别以上的全二分带宽（这里是 400GB/s）。这意味着如果我们将节点分成两半，每个节点可以同时向另一个分区的节点出口 400GB/s。更重要的是，这意味着我们应该在横向扩展网络中有一个大致恒定的 AllReduce 带宽！虽然它可能不是这样实现的，你可以想象在横向扩展网络中的任意多个节点上做环形归约，因为你可以构建一个包括每个节点的环。
+
+| 级别 | GPU | 每单元交换机 | 交换机类型 | 每单元带宽 (TB/s，全双工) | GPU 到 GPU 带宽 (GB/s，全双工) | 胖树带宽 (GB/s，全双工) |
 | :---: | :------------: | :-------------------------: | :---------: | :------------------------------------------: | :--------------------------------------: | :---: |
-| Node  |       8        |              4              |     NVL     |                     3.6                      |                   450                    | 450
-| Leaf  |      256       |              8              |     IB      |                     12.8                     |                    50                    | 400 |
-| Spine |      1024      |             16              |     IB      |                     51.2                     |                    50                    | 400 |
+| 节点  |       8        |              4              |     NVL     |                     3.6                      |                   450                    | 450
+| 叶  |      256       |              8              |     IB      |                     12.8                     |                    50                    | 400 |
+| 脊 |      1024      |             16              |     IB      |                     51.2                     |                    50                    | 400 |
 
-By comparison, a TPU v5p has about 90GB/s egress bandwidth per link, or 540GB/s egress along all axes of the 3D torus. This is not point-to-point so it can only be used for restricted, uniform communication patterns, but it still gives us a much higher TPU to TPU bandwidth that can scale to arbitrarily large topologies (at least up to 8960 TPUs).
+相比之下，TPU v5p 每个链接约有 90GB/s 出口带宽，或沿 3D 环面所有轴 540GB/s 出口。这不是点对点的，所以它只能用于受限的均匀通信模式，但它仍然给我们更高的 TPU 到 TPU 带宽，可以扩展到任意大的拓扑（至少到 8960 个 TPU）。
 
-The GPU switching fabric can in theory be extended to arbitrary sizes by adding additional switches or layers of indirection, at the cost of additional latency and costly network switches.
+GPU 交换结构理论上可以通过添加额外的交换机或间接层扩展到任意大小，代价是额外的延迟和昂贵的网络交换机。
 
-<p markdown=1 class="takeaway">**Takeaway**: Within an H100 node, we have a full fat tree bandwidth of 450GB/s from each GPU, while beyond the node, this drops to 400GB/s node-to-node. This will turn out to be critical for communication primitives.</p>
+<p markdown=1 class="takeaway">**要点**：在 H100 节点内，我们从每个 GPU 有 450GB/s 的全胖树带宽，而节点外，这降至 400GB/s 节点到节点。这对通信原语来说将是关键的。</p>
 
-**GB200 NVL72s:** NVIDIA has recently begun producing new GB200 NVL72 GPU clusters that combine 72 GPUs in a single NVLink domain with full 900GB/s of GPU to GPU bandwidth. These domains can then be linked into larger SuperPods with proportionally higher (9x) IB fat tree bandwidth. Here is a diagram of that topology:
+**GB200 NVL72：** NVIDIA 最近开始生产新的 GB200 NVL72 GPU 集群，将 72 个 GPU 组合在一个 NVLink 域中，具有完整的 900GB/s GPU 到 GPU 带宽。这些域然后可以用成比例更高（9 倍）的 IB 胖树带宽链接成更大的 SuperPod。这是该拓扑的图示：
 
-{% include figure.liquid path="assets/gpu/gb200-superpod.png" class="img-fluid" caption="<b>Figure:</b> a diagram showing a GB200 DGX SuperPod of 576 GPUs. Each rack at the bottom layer contains 72 GB200 GPUs." %}
+{% include figure.liquid path="assets/gpu/gb200-superpod.png" class="img-fluid" caption="<b>图：</b>显示 576 个 GPU 的 GB200 DGX SuperPod 的图示。底层的每个机架包含 72 个 GB200 GPU。" %}
 
-Counting the egress bandwidth from a single node (the orange lines above), we have `4 * 18 * 400 / 8 = 3.6TB/s` of bandwidth to the leaf level, which is 9x more than an H100 (just as the node contains 9x more GPUs). That means the critical node egress bandwidth is much, _much_ higher and our cross-node collective bandwidth can actually be _lower_ than within the node.
-See [Appendix A](#appendix-a-how-does-this-change-with-gb200) for more discussion.
+计算单个节点的出口带宽（上面的橙色线），我们有 `4 * 18 * 400 / 8 = 3.6TB/s` 到叶级别的带宽，这比 H100 高 9 倍（正如节点包含 9 倍更多的 GPU）。这意味着关键的节点出口带宽*高得多*，我们的跨节点集合带宽实际上可以比节点内*低*。
+有关更多讨论，请参见[附录 A](#appendix-a-how-does-this-change-with-gb200)。
 
-|  Node Type  | GPUs per node | GPU egress bandwidth | Node egress bandwidth |
+|  节点类型  | 每节点 GPU | GPU 出口带宽 | 节点出口带宽 |
 | :---------: | :-----------: | :------------------: | :-------------------: |
 |    H100     |       8       |        450e9         |         400e9         |
 |    B200     |       8       |        900e9         |         400e9         |
 | GB200 NVL72 |      72       |        900e9         |        3600e9         |
 
-<p markdown=1 class="takeaway">**Takeaway**: GB200 NVL72 SuperPods drastically increase the node size and egress bandwidth from a given node, which changes our rooflines significantly.</p>
+<p markdown=1 class="takeaway">**要点**：GB200 NVL72 SuperPod 大幅增加了节点大小和给定节点的出口带宽，这显著改变了我们的 roofline。</p>
 
-### Quiz 3: Beyond the node level
+### 测验 3：超越节点级别
 
-**Question 1 [Fat tree topology]:** Using the DGX H100 diagram above, calculate the bisection bandwidth of the entire 1024 GPU pod at the node level. Show that the bandwidth of each link is chosen to ensure full bisection bandwidth. *Hint: make sure to calculate both the link bandwidth and switch bandwidth.*
+**问题 1 [胖树拓扑]：** 使用上面的 DGX H100 图示，计算整个 1024 GPU pod 在节点级别的二分带宽。证明每个链接的带宽被选择为确保全二分带宽。*提示：确保计算链接带宽和交换机带宽。*
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** Let’s do it component by component:
+**答案：** 让我们逐个组件来做：
 
-* First, each node has 8x400Gbps NDR IB cables connecting it to the leaf switches, giving each node `8 * 400 / 8 = 400 GB/s` of bandwidth to the leaf. We have 8 leaf switches with 3.2TB/s each (64 400 GBps links), but we can only use 32 of the 64 ports to ingress from the SU, so that’s `32 * 400 / 8 = 12.8TB/s` for 32 nodes, again exactly 400GB/s.
-* Then at the spine level we have `8 * 16 * 2` 400Gbps NDR IB cables connecting each SU to the spine, giving each SU `8 * 16 * 2 * 400 / 8 = 12.8 TB/s` of bandwidth to the leaf. Again, this is 400GB/s per node. We have 16 spine switches, each with 3.2TB/s, giving us `16 * 3.2 = 51.2 TB/s`, which with 128 nodes is again 400GB/s.
+* 首先，每个节点有 8x400Gbps NDR IB 电缆连接到叶交换机，给每个节点 `8 * 400 / 8 = 400 GB/s` 到叶的带宽。我们有 8 个叶交换机，每个 3.2TB/s（64 400 GBps 链接），但我们只能使用 64 个端口中的 32 个来入口从 SU，所以是 `32 * 400 / 8 = 12.8TB/s` 对 32 个节点，同样正好是 400GB/s。
+* 然后在脊级别我们有 `8 * 16 * 2` 条 400Gbps NDR IB 电缆连接每个 SU 到脊，给每个 SU `8 * 16 * 2 * 400 / 8 = 12.8 TB/s` 到叶的带宽。同样，这是每节点 400GB/s。我们有 16 个脊交换机，每个 3.2TB/s，给我们 `16 * 3.2 = 51.2 TB/s`，128 个节点同样是每节点 400GB/s。
 
-Thus if we bisect our nodes in any way, we will have 400GB/s per GPU between them. Every component has exactly the requisite bandwidth to ensure the fat tree.
-
-{% enddetails %}
-
-**Question 2 [Scaling to a larger DGX pod]:** Say we wanted to train on 2048 GPUs instead of 1024. What would be the simplest/best way to modify the above DGX topology to handle this? What about 4096? *Hint: there’s no single correct answer, but try to keep costs down. Keep link capacity in mind. [This](https://docs.nvidia.com/dgx-superpod-reference-architecture-dgx-h100.pdf) documentation may be helpful.*
-
-{% details Click here for the answer. %}
-
-**Answer:** One option would be to keep the SU structure intact (32 nodes under 8 switches) and just add more of them with more top-level switches. We’d need 2x more spine switches, so we’d have 8 SUs with 32 spine switches giving us enough bandwidth.
-
-One issue with this is that we only have 64 ports per leaf switch, and we’re already using all of them in the above diagram. But instead it’s easy to do 1x 400 Gbps NDR cable per spine instead of 2x, which gives the same total bandwidth but saves us some ports.
-
-For 4096 GPUs, we actually run out of ports, so we need to add another level of indirection, that is to say, another level in the hierarchy. NVIDIA calls these "core switches", and builds a 4096 GPU cluster with 128 spine switches and 64 core switches. You can do the math to show that this gives enough bandwidth.
+因此，如果我们以任何方式二分我们的节点，我们将在它们之间有 400GB/s 每 GPU。每个组件都有确切的必要带宽来确保胖树。
 
 {% enddetails %}
 
-## How Do Collectives Work on GPUs?
+**问题 2 [扩展到更大的 DGX pod]：** 假设我们想在 2048 个 GPU 而不是 1024 个上训练。修改上述 DGX 拓扑以处理这个的最简单/最佳方法是什么？4096 呢？*提示：没有单一正确答案，但尝试控制成本。记住链接容量。[这个](https://docs.nvidia.com/dgx-superpod-reference-architecture-dgx-h100.pdf)文档可能有帮助。*
 
-GPUs can perform all the same collectives as TPUs: ReduceScatters, AllGathers, AllReduces, and AllToAlls. Unlike TPUs, the way these work changes depending on whether they’re performed at the node level (over NVLink) or above (over InfiniBand). These collectives are implemented by NVIDIA in the [NVSHMEM](https://developer.nvidia.com/nvshmem) and [NCCL](https://developer.nvidia.com/nccl) (pronounced "nickel") libraries. NCCL is open-sourced [here](https://github.com/NVIDIA/nccl). While NCCL uses a variety of implementations depending on latency requirements/topology ([details](https://github.com/NVIDIA/nccl/issues/1415#issuecomment-2310650081)), from here on, we’ll discuss a theoretically optimal model over a switched tree fabric.
+{% details 点击这里查看答案。 %}
 
-### Intra-node collectives
+**答案：** 一个选项是保持 SU 结构不变（32 个节点在 8 个交换机下），只是用更多的顶级交换机添加更多。我们需要 2 倍更多的脊交换机，所以我们有 8 个 SU 和 32 个脊交换机给我们足够的带宽。
 
-**AllGather or ReduceScatter:** For an AllGather or ReduceScatter at the node level, you can perform them around a ring just like a TPU, using the full GPU-to-GPU bandwidth at each hop. Order the GPUs arbitrarily and send a portion of the array around the ring using the full GPU-to-GPU bandwidth.<d-footnote>You can also think of each GPU sending its chunk of size $\text{bytes} / N$ to each of the other $N - 1$ GPUs, for a total of $(N - 1) * N * bytes / N$ bytes communicated, which gives us</d-footnote> The cost of each hop is $T_\text{hop} = \text{bytes} / (N * \text{GPU egress bandwidth})$, so the overall cost is
+这个问题是我们每个叶交换机只有 64 个端口，上图中我们已经用完了所有。但相反，很容易做每个脊 1x 400 Gbps NDR 电缆而不是 2x，这给出相同的总带宽但节省了一些端口。
 
-$$T_\text{AG or RS comms} = \frac{\text{bytes} \cdot (N - 1)}{N \cdot \text{GPU egress bandwidth}} \rightarrow \frac{\text{bytes}}{\text{GPU egress bandwidth}}$$
-
-You’ll note this is exactly the same as on a TPU. For an AllReduce, you can combine an RS + AG as usual for twice the cost.
-
-{% include figure.liquid path="assets/gpu/all-gather.gif" class="img-fluid" caption="<b>Figure:</b> bandwidth-optimal 1D ring AllGather algorithm. For B bytes, this sends V / X bytes over the top-level switches X - 1 times." %}
-
-If you’re concerned about latency (e.g. if your array is very small), you can do a tree reduction, where you AllReduce within pairs of 2, then 4, then 8 for a total of $\log(N)$ hops instead of $N - 1$, although the total cost is still the same.
-
-<p markdown=1 class="takeaway">**Takeaway:** the cost to AllGather or ReduceScatter an array of B bytes within a single node is about $T_\text{comms} = B * (8 - 1) / (8 * W_\text{GPU egress}) \approxeq B / W_\text{GPU egress}$. This is theoretically around $B  / \text{450e9}$ on an H100 and $B / \text{900e9}$ on a B200. An AllReduce has 2x this cost unless in-network reductions are enabled.</p>
-
-<b markdown=1 style="color: #57cf57;">Pop Quiz 1 [AllGather time]:</b> Using an 8xH100 node with 450 GB/s full-duplex bandwidth, how long does AllGather(bf16[B<sub>X</sub>, F]) take? Let $B=1024$, $F=16,384$.
-
-{% details Click here for the answer. %}
-
-**Answer:** We have a total of $2 \cdot B \cdot F$ bytes, with 450e9 unidirectional bandwidth. This would take roughly $T_\text{comms} = (2 \cdot B \cdot F) / \text{450e9}$, or more precisely $(2 \cdot B \cdot F \cdot (8 - 1)) / (8 \cdot \text{450e9})$. Using the provided values, this gives us roughly $(2 \cdot 1024 \cdot 16384) / \text{450e9} = \text{75us}$, or more precisely, $\text{65us}$.
+对于 4096 个 GPU，我们实际上用完了端口，所以我们需要添加另一个间接层，也就是说，层级中的另一个级别。NVIDIA 称这些为"核心交换机"，用 128 个脊交换机和 64 个核心交换机构建 4096 GPU 集群。你可以做数学来证明这给出足够的带宽。
 
 {% enddetails %}
 
-**AllToAlls:** GPUs within a node have all-to-all connectivity, which makes AllToAlls, well, quite easy. Each GPU just sends directly to the destination node. Within a node, for B bytes, each GPU has $B / N$ bytes and sends $(B / N^2)$ bytes to $N - 1$ target nodes for a total of
+## GPU 上的集合操作如何工作？
+
+GPU 可以执行与 TPU 相同的所有集合操作：ReduceScatter、AllGather、AllReduce 和 AllToAll。与 TPU 不同，这些工作方式取决于它们是在节点级别执行（通过 NVLink）还是以上（通过 InfiniBand）。这些集合操作由 NVIDIA 在 [NVSHMEM](https://developer.nvidia.com/nvshmem) 和 [NCCL](https://developer.nvidia.com/nccl)（发音为"nickel"）库中实现。NCCL 在[这里](https://github.com/NVIDIA/nccl)开源。虽然 NCCL 根据延迟要求/拓扑使用各种实现（[详情](https://github.com/NVIDIA/nccl/issues/1415#issuecomment-2310650081)），从这里开始，我们将讨论在交换树结构上的理论最优模型。
+
+### 节点内集合操作
+
+**AllGather 或 ReduceScatter：** 对于节点级别的 AllGather 或 ReduceScatter，你可以像 TPU 一样在环上执行它们，在每跳使用完整的 GPU 到 GPU 带宽。任意排列 GPU，使用完整的 GPU 到 GPU 带宽在环上发送数组的一部分。<d-footnote>你也可以想象每个 GPU 将其大小为 $\text{bytes} / N$ 的块发送到其他 $N - 1$ 个 GPU，总共 $(N - 1) * N * bytes / N$ 字节通信，这给我们</d-footnote> 每跳的成本是 $T_\text{hop} = \text{bytes} / (N * \text{GPU 出口带宽})$，所以总成本是
+
+$$T_\text{AG 或 RS comms} = \frac{\text{bytes} \cdot (N - 1)}{N \cdot \text{GPU 出口带宽}} \rightarrow \frac{\text{bytes}}{\text{GPU 出口带宽}}$$
+
+你会注意到这与 TPU 上完全相同。对于 AllReduce，你可以像往常一样组合 RS + AG，成本翻倍。
+
+{% include figure.liquid path="assets/gpu/all-gather.gif" class="img-fluid" caption="<b>图：</b>带宽最优的 1D 环 AllGather 算法。对于 B 字节，这在顶级交换机上发送 V / X 字节 X - 1 次。" %}
+
+如果你关心延迟（例如如果你的数组非常小），你可以做树形归约，在 2 的对内 AllReduce，然后 4，然后 8，总共 $\log(N)$ 跳而不是 $N - 1$，尽管总成本仍然相同。
+
+<p markdown=1 class="takeaway">**要点：** 在单个节点内 AllGather 或 ReduceScatter B 字节数组的成本约为 $T_\text{comms} = B * (8 - 1) / (8 * W_\text{GPU 出口}) \approxeq B / W_\text{GPU 出口}$。这在理论上在 H100 上约为 $B  / \text{450e9}$，在 B200 上为 $B / \text{900e9}$。除非启用了网络内归约，否则 AllReduce 的成本是 2 倍。</p>
+
+<b markdown=1 style="color: #57cf57;">快问快答 1 [AllGather 时间]：</b> 使用带有 450 GB/s 全双工带宽的 8xH100 节点，AllGather(bf16[B<sub>X</sub>, F]) 需要多长时间？设 $B=1024$，$F=16,384$。
+
+{% details 点击这里查看答案。 %}
+
+**答案：** 我们有总共 $2 \cdot B \cdot F$ 字节，450e9 单向带宽。这大约需要 $T_\text{comms} = (2 \cdot B \cdot F) / \text{450e9}$，或更精确地 $(2 \cdot B \cdot F \cdot (8 - 1)) / (8 \cdot \text{450e9})$。使用提供的值，这给我们大约 $(2 \cdot 1024 \cdot 16384) / \text{450e9} = \text{75us}$，或更精确地，$\text{65us}$。
+
+{% enddetails %}
+
+**AllToAll：** 节点内的 GPU 有全对全连接，这使得 AllToAll，嗯，相当容易。每个 GPU 只是直接发送到目标节点。在节点内，对于 B 字节，每个 GPU 有 $B / N$ 字节并发送 $(B / N^2)$ 字节到 $N - 1$ 个目标节点，总共
 
 $$T_\text{AllToAll comms} = \frac{B \cdot (N - 1)}{W \cdot N^2} \approx \frac{B}{W \cdot N}$$
 
-Compare this to a TPU, where the cost is $B / (4W)$. Thus, within a single node, we get a 2X theoretical speedup in runtime ($B / 4W$ vs. $B / 8W$).
+与 TPU 相比，成本是 $B / (4W)$。因此，在单个节点内，我们获得 2 倍的理论运行时间加速（$B / 4W$ vs. $B / 8W$）。
 
-For Mixture of Expert (MoE) models, we frequently want to do a *sparse or ragged AllToAll,* where we guarantee at most $k$ of $N$ shards on the output dimension are non-zero, that is to say $T_\text{AllToAll} \rightarrow K[B, N]$ where at most $k$ of $N$ entries on each axis are non-zero. The cost of this is reduced by $k/N$, for a total of about $\min(k/N, 1) \cdot B / (W \cdot N)$. For an MoE, we often pick the non-zero values independently at random, so there's some chance of having fewer than $k$ non-zero, giving us approximately
-$(N-1)/N \cdot \min(k/N, 1) \cdot B / (W \cdot N)$.<d-footnote>The true cost is actually $$(1 - \left(\frac{Z - 1}{Z}\right)^K) \cdot \frac{Z - 1}{Z}$$ the expected number of distinct outcomes in $K$ dice rolls, but it is very close to the approximation given. See the Appendix for more details.</d-footnote>
+对于混合专家（MoE）模型，我们经常想做*稀疏或参差 AllToAll*，我们保证输出维度上最多 $k$ 个 $N$ 分片是非零的，也就是说 $T_\text{AllToAll} \rightarrow K[B, N]$，其中每个轴上最多 $k$ 个 $N$ 条目是非零的。这个成本减少了 $k/N$，总共约 $\min(k/N, 1) \cdot B / (W \cdot N)$。对于 MoE，我们经常独立随机选择非零值，所以有一些机会少于 $k$ 个非零，给我们大约
+$(N-1)/N \cdot \min(k/N, 1) \cdot B / (W \cdot N)$。<d-footnote>真正的成本实际上是 $$(1 - \left(\frac{Z - 1}{Z}\right)^K) \cdot \frac{Z - 1}{Z}$$，$K$ 次骰子投掷中预期的不同结果数，但它非常接近给出的近似值。更多细节见附录。</d-footnote>
 
-<b markdown=1 style="color: #c55404ff;">Pop Quiz 2 [AllToAll time]:</b> Using an 8xH100 node with 450 GB/s unidirectional bandwidth, how long does AllToAll<sub>X->N</sub>(bf16[B<sub>X</sub>, N]) take? What if we know only 4 of 8 entries will be non-zero?
+<b markdown=1 style="color: #c55404ff;">快问快答 2 [AllToAll 时间]：</b> 使用带有 450 GB/s 单向带宽的 8xH100 节点，AllToAll<sub>X->N</sub>(bf16[B<sub>X</sub>, N]) 需要多长时间？如果我们知道只有 8 个条目中的 4 个是非零的呢？
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** From the above, we know that in the dense case, the cost is $B \cdot (N-1) / (W \cdot N^2)$, or $B / (W \cdot N)$. If we know only $\frac{1}{2}$ the entries will be non-padding, we can send $B \cdot k/N / (W \cdot N) = B / (2 \cdot W \cdot N)$, roughly half the overall cost.
-
-{% enddetails %}
-
-<p markdown=1 class="takeaway">**Takeaway:** The cost of an AllToAll on an array of $B$ bytes on GPU within a single node is about $T_\text{comms} = (B \cdot (8 - 1)) / (8^2 \cdot W_\text{GPU egress}) \approx B / (8 \cdot W_\text{GPU egress})$. For a ragged (top-$k$) AllToAll, this is decreased further to $(B \cdot k) / (64 \cdot W_\text{GPU egress})$.</p>
-
-**Empirical measurements:** here is an empirical measurement of AllReduce bandwidth over an 8xH100 node. The Algo BW is the measured bandwidth (bytes / runtime) and the Bus BW is calculated as $2 \cdot W \cdot (8 - 1) / 8$, theoretically a measure of the actual link bandwidth. You’ll notice that we do achieve close to 370GB/s, less than 450GB/s but reasonably close, although only around 10GB/device. This means although these estimates are theoretically correct, it takes a large message to realize it.
-
-{% include figure.liquid path="assets/gpu/gpu-all-reduce-bw.png" class="img-fluid" caption="<b>Figure:</b> AllReduce throughput for an 8xH100 node with SHARP disabled. The blue curve is the empirical link bandwidth, calculated as $2 * \text{bytes} * (N - 1) / (N * \text{runtime})$ from the empirical measurements. Note that we do not get particularly close to the claimed bandwidth of 450GB/s, even with massive 10GB arrays." %}
-
-This is a real problem, since it meaningfully complicates any theoretical claims we can make, since e.g. even an AllReduce over a reasonable sized array, like LLaMA-3 70B’s MLPs (of size `bf16[8192, 28672]`, or with 8-way model sharding, `bf16[8192, 3584] = 58MB`) can achieve only around 150GB/s compared to the peak 450GB/s. By comparison, TPUs achieve peak bandwidth at much lower message sizes (see Appendix B).
-
-<p markdown=1 class="takeaway">**Takeaway:** although NVIDIA claims bandwidths of about 450GB/s over an H100 NVLink, it is difficult in practice to exceed 370 GB/s, so adjust the above estimates accordingly.</p>
-
-**In network reductions:** Since the Hopper generation, NVIDIA switches have supported ["SHARP" (Scalable Hierarchical Aggregation and Reduction Protocol)](https://developer.nvidia.com/blog/advancing-performance-with-nvidia-sharp-in-network-computing/) which allows for "in-network reductions". This means *the network switches themselves* can do reduction operations and multiplex or "MultiCast" the result to multiple target GPUs:
-
-{% include figure.liquid path="assets/gpu/sharp-algorithm.png" class="img-fluid" caption="<b>Figure:</b> an AllReduce without SHARP has 2x the theoretical cost because it has to pass through each GPU twice. In practice, speedups are only about 30% (from NCCL 2.27.5)." %}
-
-Theoretically, this close to halves the cost of an AllReduce, since it means each GPU can send its data to a top-level switch which itself performs the reduction and broadcasts the result to each GPU without having to egress each GPU twice, while also reducing network latency.
-
-$$T_\text{SHARP AR comms} = \frac{\text{bytes}}{\text{GPU egress bandwidth}}$$
-
-Note that this is exact and not off by a factor of $1/N$, since each GPU egresses $B \cdot (N - 1) / N$ first, then receives the partially reduced version of its local shard (ingress of $B/N$), finishes the reductions, then egresses $B/N$ again, then ingresses the fully reduced result (ingress of $B \cdot (N - 1) / N$), resulting in exactly $B$ bytes ingressed.
-
-However, in practice we see about a 30% increase in bandwidth with SHARP enabled, compared to the predicted 75%. This gets us up merely to about 480GB/s effective collective bandwidth, not nearly 2x.
-
-{% include figure.liquid path="assets/gpu/sharp-all-reduce-cost.png" class="img-fluid" caption="<b>Figure:</b> empirical measurements of AllReduce algo bandwidth with and without NVIDIA SHARP enabled within a node. The gains amount to about 30% throughput improvement at peak, even though algorithmically it ought to be able to achieve closer to a 75% gain." %}
-
-<p markdown=1 class="takeaway">**Takeaway:** in theory, NVIDIA SHARP (available on most NVIDIA switches) should reduce the cost of an AllReduce on $B$ bytes from about $2 * B / W$ to $B / W$. However, in practice we only see a roughly 30% improvement in bandwidth. Since pure AllReduces are fairly rare in LLMs, this is not especially useful.</p>
-
-### Cross-node collectives
-
-When we go beyond the node-level, the cost is a bit more subtle. When doing a reduction over a tree, you can think of reducing from the bottom up, first within a node, then at the leaf level, and then at the spine level, using the normal algorithm at each level. For an AllReduce especially, you can see that this allows us to communicate less data overall, since after we AllReduce at the node level, we only have to egress $B$ bytes up to the leaf instead of $B * N$.
-
-**How costly is this?** To a first approximation, because we have full bisection bandwidth, the cost of an AllGather or ReduceScatter is roughly the buffer size in bytes divided by the node egress bandwidth (400GB/s on H100) *regardless of any of the details of the tree reduction.*
-
-$$T_\text{AG or RS comms} = \frac{\text{bytes}}{W_\text{node egress}} \underset{H100}{=} \frac{\text{bytes}}{\text{400e9}}$$
-
-where $W_\text{node}$ egress is generally 400GB/s for the above H100 network (8x400Gbps IB links egressing each node). The cleanest way to picture this is to imagine doing a ring reduction over *every node in the cluster*. Because of the fat tree topology, we can always construct a ring with $W_\text{node}$ egress between any two nodes and do a normal reduction. The node-level reduction will (almost) never be the bottleneck because it has a higher overall bandwidth and better latency, although in general the cost is
-
-$$T_\text{total} = \max(T_\text{comms at node}, T_\text{comms in scale-out network}) = \max\left[\frac{\text{bytes}}{W_\text{GPU egress}}, \frac{\text{bytes}}{W_\text{node egress}}\right]$$
-
-{% details You can see a more precise derivation here. %}
-
-We can be more precise in noting that we are effectively doing a ring reduction at each layer in the network, which we can mostly overlap, so we have:
-
-$$T_\text{AG or RS comms} = \text{bytes} \cdot max_\text{depth i}\left[\frac{D_i - 1}{D_i \cdot W_\text{link i}}\right]$$
-
-where $D_i$ is the degree at depth $i$ (the number of children at depth $i$), $W_\text{link i}$ is the bandwidth of the link connecting each child to node $i$.
-
-Using this, we can calculate the available AllGather/AllReduce bandwidth as $min_\text{depth i}(D_i * W_\text{link i} / (D_i - 1))$ for a given topology. In the case above, we have:
-
-* **Node:** $D_\text{node}$ = 8 since we have 8 GPUs in a node with Wlink i = 450GB/s. Thus we have an AG bandwidth of `450e9 * 8 / (8 - 1) = 514GB/s`.
-* **Leaf:** $D_\text{leaf}$ = 32 since we have 32 nodes in an SU with Wlink i = 400GB/s (8x400Gbps IB links). Thus our bandwidth is `400e9 * 32 / (32 - 1) = 413GB/s`.
-* **Spine:** $D_\text{spine}$ = 4 since we have 4 SUs with $W_\text{link i}$ = 12.8TB/s (from `8 * 16 * 2 * 400Gbps` links above). Our bandwidth is `12.8e12 * 4 / (4 - 1) = 17.1TB/s`.
-
-Hence our overall AG or RS bandwidth is `min(514GB/s, 413GB/s, 17.1TB/s) = 413GB/s` at the leaf level, so in practice $T_\text{AG or RS comms} = B / \text{413GB/s}$, i.e. we have about 413GB/s of AllReduce bandwidth even at the highest level. For an AllReduce with SHARP, it will be slightly lower than this (around 400GB/s) because we don’t have the $(N - 1) / N$ factor. Still, 450GB/s and 400GB/s are close enough to use as approximations.
+**答案：** 从上面，我们知道在稠密情况下，成本是 $B \cdot (N-1) / (W \cdot N^2)$，或 $B / (W \cdot N)$。如果我们知道只有 $\frac{1}{2}$ 的条目不是填充，我们可以发送 $B \cdot k/N / (W \cdot N) = B / (2 \cdot W \cdot N)$，大约是总成本的一半。
 
 {% enddetails %}
 
-**Other collectives:** AllReduces are still 2x the above cost unless SHARP is enabled. NVIDIA sells SHARP-enabled IB switches as well, although not all providers have them. AllToAlls do change quite a bit cross-node, since they aren't "hierarchical" in the way AllReduces are. If we want to send data from every GPU to every other GPU, we can't use take advantage of the full bisection bandwidth at the node level. That means if we have an N-way AllToAll that spans $M = N / 8$ nodes, the cost is
+<p markdown=1 class="takeaway">**要点：** 在单个节点内 GPU 上 $B$ 字节数组的 AllToAll 成本约为 $T_\text{comms} = (B \cdot (8 - 1)) / (8^2 \cdot W_\text{GPU 出口}) \approx B / (8 \cdot W_\text{GPU 出口})$。对于参差（top-$k$）AllToAll，这进一步减少到 $(B \cdot k) / (64 \cdot W_\text{GPU 出口})$。</p>
 
-$$T_\text{AllToAll comms} = \frac{B \cdot (M - 1)}{M^2 \cdot W_\text{node egress}} \approxeq \frac{B}{M \cdot W_\text{node egress}}$$
+**经验测量：** 这是 8xH100 节点上 AllReduce 带宽的经验测量。Algo BW 是测量的带宽（字节/运行时间），Bus BW 计算为 $2 \cdot W \cdot (8 - 1) / 8$，理论上是实际链接带宽的测量。你会注意到我们确实达到了接近 370GB/s，低于 450GB/s 但相当接近，尽管只在约 10GB/设备时。这意味着虽然这些估计在理论上是正确的，但需要大消息才能实现。
 
-which effectively has 50GB/s rather than 400GB/s of bandwidth. We go from $B / (8 * \text{450e9})$ within a single H100 node to $B / (2 \cdot \text{400e9})$ when spanning 2 nodes, a more than 4x degradation.
+{% include figure.liquid path="assets/gpu/gpu-all-reduce-bw.png" class="img-fluid" caption="<b>图：</b>禁用 SHARP 的 8xH100 节点上的 AllReduce 吞吐量。蓝色曲线是经验链接带宽，计算为 $2 * \text{bytes} * (N - 1) / (N * \text{runtime})$ 来自经验测量。注意即使使用大量的 10GB 数组，我们也没有特别接近声称的 450GB/s 带宽。" %}
 
-Here is a summary of the 1024-GPU DGX H100 SuperPod architecture:
+这是一个真正的问题，因为它有意义地复杂化了我们可以做出的任何理论声明，因为例如即使是合理大小数组的 AllReduce，如 LLaMA-3 70B 的 MLP（大小为 `bf16[8192, 28672]`，或使用 8 路模型分片，`bf16[8192, 3584] = 58MB`）只能达到约 150GB/s，而峰值 450GB/s。相比之下，TPU 在更低的消息大小下就能达到峰值带宽（见附录 B）。
 
-|   Level   | Number of GPUs | Degree (# Children) | Switch Bandwidth (full-duplex, TB/s) | Cable Bandwidth (full-duplex, TB/s) | Collective Bandwidth (GB/s) |
+<p markdown=1 class="takeaway">**要点：** 虽然 NVIDIA 声称 H100 NVLink 的带宽约为 450GB/s，但实际上很难超过 370 GB/s，所以相应调整上述估计。</p>
+
+**网络内归约：** 自 Hopper 代以来，NVIDIA 交换机已支持 ["SHARP"（可扩展分层聚合和归约协议）](https://developer.nvidia.com/blog/advancing-performance-with-nvidia-sharp-in-network-computing/)，允许"网络内归约"。这意味着*网络交换机本身*可以做归约操作并多路复用或"MultiCast"结果到多个目标 GPU：
+
+{% include figure.liquid path="assets/gpu/sharp-algorithm.png" class="img-fluid" caption="<b>图：</b>没有 SHARP 的 AllReduce 理论成本是 2 倍，因为它必须通过每个 GPU 两次。实际上，加速只有约 30%（来自 NCCL 2.27.5）。" %}
+
+理论上，这接近将 AllReduce 的成本减半，因为它意味着每个 GPU 可以将其数据发送到顶级交换机，交换机本身执行归约并将结果广播到每个 GPU，而不必两次出口每个 GPU，同时也减少网络延迟。
+
+$$T_\text{SHARP AR comms} = \frac{\text{bytes}}{\text{GPU 出口带宽}}$$
+
+注意这是精确的，而不是差 $1/N$ 的因子，因为每个 GPU 先出口 $B \cdot (N - 1) / N$，然后接收其本地分片的部分归约版本（入口 $B/N$），完成归约，然后再出口 $B/N$，然后入口完全归约的结果（入口 $B \cdot (N - 1) / N$），导致正好 $B$ 字节入口。
+
+然而，实际上我们看到启用 SHARP 时带宽增加约 30%，而不是预测的 75%。这使我们仅达到约 480GB/s 有效集合带宽，远不是 2 倍。
+
+{% include figure.liquid path="assets/gpu/sharp-all-reduce-cost.png" class="img-fluid" caption="<b>图：</b>节点内启用和不启用 NVIDIA SHARP 的 AllReduce 算法带宽的经验测量。收益在峰值时约为 30% 吞吐量改进，尽管从算法上讲它应该能够达到接近 75% 的增益。" %}
+
+<p markdown=1 class="takeaway">**要点：** 理论上，NVIDIA SHARP（大多数 NVIDIA 交换机上可用）应该将 $B$ 字节 AllReduce 的成本从约 $2 * B / W$ 降低到 $B / W$。然而，实际上我们只看到约 30% 的带宽改进。由于纯 AllReduce 在 LLM 中相当罕见，这不是特别有用。</p>
+
+### 跨节点集合操作
+
+当我们超越节点级别时，成本稍微微妙一些。在树上做归约时，你可以想象从下往上归约，首先在节点内，然后在叶级别，然后在脊级别，在每个级别使用正常算法。特别是对于 AllReduce，你可以看到这允许我们整体通信更少数据，因为在节点级别 AllReduce 后，我们只需要出口 $B$ 字节到叶，而不是 $B * N$。
+
+**这有多昂贵？** 粗略地说，因为我们有全二分带宽，AllGather 或 ReduceScatter 的成本大约是缓冲区字节大小除以节点出口带宽（H100 上 400GB/s），*不管树形归约的任何细节。*
+
+$$T_\text{AG 或 RS comms} = \frac{\text{bytes}}{W_\text{节点出口}} \underset{H100}{=} \frac{\text{bytes}}{\text{400e9}}$$
+
+其中 $W_\text{节点}$ 出口通常对于上述 H100 网络是 400GB/s（每个节点出口 8x400Gbps IB 链接）。想象这个最干净的方式是想象在*集群中的每个节点*上做环形归约。因为胖树拓扑，我们总是可以构建一个在任意两个节点之间有 $W_\text{节点}$ 出口的环并做正常归约。节点级归约（几乎）永远不会是瓶颈，因为它有更高的整体带宽和更好的延迟，尽管一般成本是
+
+$$T_\text{total} = \max(T_\text{节点通信}, T_\text{横向扩展网络通信}) = \max\left[\frac{\text{bytes}}{W_\text{GPU 出口}}, \frac{\text{bytes}}{W_\text{节点出口}}\right]$$
+
+{% details 你可以在这里看到更精确的推导。 %}
+
+我们可以更精确地注意到我们实际上在网络的每一层做环形归约，我们可以大部分重叠，所以我们有：
+
+$$T_\text{AG 或 RS comms} = \text{bytes} \cdot max_\text{深度 i}\left[\frac{D_i - 1}{D_i \cdot W_\text{链接 i}}\right]$$
+
+其中 $D_i$ 是深度 $i$ 的度（深度 $i$ 的子节点数），$W_\text{link i}$ 是连接每个子节点到节点 $i$ 的链接带宽。
+
+使用这个，我们可以计算给定拓扑的可用 AllGather/AllReduce 带宽为 $min_\text{深度 i}(D_i * W_\text{link i} / (D_i - 1))$。在上述情况下，我们有：
+
+* **节点：** $D_\text{node}$ = 8，因为我们节点中有 8 个 GPU，Wlink i = 450GB/s。因此我们的 AG 带宽是 `450e9 * 8 / (8 - 1) = 514GB/s`。
+* **叶：** $D_\text{leaf}$ = 32，因为我们 SU 中有 32 个节点，Wlink i = 400GB/s（8x400Gbps IB 链接）。因此我们的带宽是 `400e9 * 32 / (32 - 1) = 413GB/s`。
+* **脊：** $D_\text{spine}$ = 4，因为我们有 4 个 SU，$W_\text{link i}$ = 12.8TB/s（来自上面 `8 * 16 * 2 * 400Gbps` 链接）。我们的带宽是 `12.8e12 * 4 / (4 - 1) = 17.1TB/s`。
+
+因此我们的整体 AG 或 RS 带宽是 `min(514GB/s, 413GB/s, 17.1TB/s) = 413GB/s` 在叶级别，所以实际上 $T_\text{AG 或 RS comms} = B / \text{413GB/s}$，即即使在最高级别我们也有约 413GB/s 的 AllReduce 带宽。对于带 SHARP 的 AllReduce，它会稍低一些（约 400GB/s），因为我们没有 $(N - 1) / N$ 因子。尽管如此，450GB/s 和 400GB/s 足够接近可以用作近似值。
+
+{% enddetails %}
+
+**其他集合操作：** 除非启用 SHARP，否则 AllReduce 仍然是上述成本的 2 倍。NVIDIA 也销售支持 SHARP 的 IB 交换机，尽管不是所有提供商都有。AllToAll 在跨节点时确实变化很大，因为它们不像 AllReduce 那样"分层"。如果我们想从每个 GPU 发送数据到每个其他 GPU，我们不能利用节点级别的全二分带宽。这意味着如果我们有一个跨越 $M = N / 8$ 个节点的 N 路 AllToAll，成本是
+
+$$T_\text{AllToAll comms} = \frac{B \cdot (M - 1)}{M^2 \cdot W_\text{节点出口}} \approxeq \frac{B}{M \cdot W_\text{节点出口}}$$
+
+这实际上有 50GB/s 而不是 400GB/s 的带宽。我们从单个 H100 节点内的 $B / (8 * \text{450e9})$ 变成跨越 2 个节点时的 $B / (2 \cdot \text{400e9})$，超过 4 倍的退化。
+
+这是 1024-GPU DGX H100 SuperPod 架构的摘要：
+
+|   级别   | GPU 数量 | 度（子节点数） | 交换机带宽（全双工，TB/s） | 电缆带宽（全双工，TB/s） | 集合带宽 (GB/s) |
 | :-------: | :------------: | :-----------------: | :----------------------------------: | :---------------------------------: | :-------------------------: |
-|   Node    |       8        |          8          |                 6.4                  |                 3.6                 |             450             |
-| Leaf (SU) |      256       |         32          |                 25.6                 |                12.8                 |             400             |
-|   Spine   |      1024      |          4          |                 51.2                 |                51.2                 |             400             |
+|   节点    |       8        |          8          |                 6.4                  |                 3.6                 |             450             |
+| 叶 (SU) |      256       |         32          |                 25.6                 |                12.8                 |             400             |
+|   脊   |      1024      |          4          |                 51.2                 |                51.2                 |             400             |
 
-We use the term "Collective Bandwidth" to describe the effective bandwidth at which we can egress either the GPU or the node. It’s also the $\text{bisection bandwidth} * 2 / N$.
+我们使用术语"集合带宽"来描述我们可以出口 GPU 或节点的有效带宽。它也是 $\text{二分带宽} * 2 / N$。
 
-<p markdown=1 class="takeaway">**Takeaway:** beyond the node level, the cost of an AllGather or ReduceScatter on B bytes is roughly $B / W_\text{node egress}$, which is $B / \text{400e9}$ on an H100 DGX SuperPod, while AllReduces cost twice as much unless SHARP is enabled. The overall topology is a fat tree designed to give constant bandwidth between any two pairs of nodes.</p>
+<p markdown=1 class="takeaway">**要点：** 超越节点级别，B 字节 AllGather 或 ReduceScatter 的成本大约是 $B / W_\text{节点出口}$，这在 H100 DGX SuperPod 上是 $B / \text{400e9}$，而 AllReduce 成本是两倍，除非启用 SHARP。整体拓扑是一棵胖树，设计为在任意两对节点之间提供恒定带宽。</p>
 
-**Reductions when array is sharded over a separate axis:** Consider the cost of a reduction like
+**数组沿另一个轴分片时的归约：** 考虑如下归约的成本
 
 $$\text{AllReduce}_X(A[I_Y, J]\ \{ U_X \})$$
 
-where we are AllReducing over an array that is itself sharded along another axis $Y$. On TPUs, the overall cost of this operation is reduced by a factor of $1 / Y$ compared to the unsharded version since we’re sending $1 / Y$ as much data per axis. On GPUs, the cost depends on which axis is the "inner" one (intra-node vs. inter-node) and whether each shard spans more than a single node. Assuming $Y$ is the inner axis, and the array has $\text{bytes}$ total bytes, the overall cost is reduced effectively by $Y$, but only if $Y$ spans multiple nodes:
+其中我们在一个本身沿另一个轴 $Y$ 分片的数组上 AllReduce。在 TPU 上，这个操作的总成本比未分片版本减少 $1 / Y$ 倍，因为我们每轴发送 $1 / Y$ 的数据。在 GPU 上，成本取决于哪个轴是"内部"轴（节点内与节点间）以及每个分片是否跨越多个节点。假设 $Y$ 是内部轴，数组有 $\text{bytes}$ 总字节，只有当 $Y$ 跨越多个节点时，总成本有效减少 $Y$：
 
-$$T_\text{comms at node} = \frac{\text{bytes}}{W_\text{GPU egress}} \cdot \frac{1}{\min(Y, D_\text{node})}$$
+$$T_\text{节点通信} = \frac{\text{bytes}}{W_\text{GPU 出口}} \cdot \frac{1}{\min(Y, D_\text{node})}$$
 
-$$T_\text{comms in scale-out network} = \frac{\text{bytes}}{W_\text{node egress}} \cdot \frac{D_\text{node}}{\max(D_\text{node}, Y)}$$
+$$T_\text{横向扩展网络通信} = \frac{\text{bytes}}{W_\text{节点出口}} \cdot \frac{D_\text{node}}{\max(D_\text{node}, Y)}$$
 
-$$T_\text{total} = \max(T_\text{comms at node}, T_\text{comms in scale-out network})$$
+$$T_\text{total} = \max(T_\text{节点通信}, T_\text{横向扩展网络通信})$$
 
-where N is the number of GPUs and again $D_\text{node}$ is the number of GPUs in a node (the degree of the node). As you can see, if $Y < D_\text{node}$, we get a win at the node level but generally don’t see a reduction in overall runtime, while if $Y > D_\text{node}$, we get a speedup proportional to the number of nodes spanned.
+其中 N 是 GPU 数量，$D_\text{node}$ 是节点中的 GPU 数量（节点的度）。如你所见，如果 $Y < D_\text{node}$，我们在节点级别获得胜利但通常看不到总运行时间的减少，而如果 $Y > D_\text{node}$，我们获得与内部轴跨越的节点数成比例的加速。
 
-If we want to be precise about the ring reduction, the general rule for a tree AllGather<sub>X</sub>(A<sub>Y</sub> { U<sub>X</sub> }) (assuming Y is the inner axis) is
+如果我们想精确关于环形归约，树 AllGather<sub>X</sub>(A<sub>Y</sub> { U<sub>X</sub> })（假设 Y 是内部轴）的一般规则是
 
-$$T_\text{AR or RS comms} = \text{bytes} \cdot \max_{\text{depth } i}\left[\frac{D_i - 1}{D_i \cdot \max(Y, S_{i-1}) \cdot W_{\text{link } i}}\right]$$
+$$T_\text{AR 或 RS comms} = \text{bytes} \cdot \max_{\text{深度 } i}\left[\frac{D_i - 1}{D_i \cdot \max(Y, S_{i-1}) \cdot W_{\text{链接 } i}}\right]$$
 
-where $S_i$ is M * N * …, the size of the subnodes below level i in the tree. This is roughly saying that the more GPUs or nodes we span, the greater our available bandwidth is, but only within that node.
+其中 $S_i$ 是 M * N * …，树中级别 i 以下子节点的大小。这大致是说我们跨越的 GPU 或节点越多，我们可用的带宽越大，但仅在该节点内。
 
-**Pop Quiz 3 [Sharding along 2 axes]:** Say we want to perform $\text{AllGather}_X(\text{bf16}[D_X, F_Y])$ where $Y$ is the inner axis over a single SU (256 chips). How long will this take as a function of $D$, $F$, and $Y$?
+**快问快答 3 [沿 2 轴分片]：** 假设我们想在单个 SU（256 个芯片）上执行 $\text{AllGather}_X(\text{bf16}[D_X, F_Y])$，其中 $Y$ 是内部轴。这作为 $D$、$F$ 和 $Y$ 的函数需要多长时间？
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** We can break this into two cases, where Y <= 8 and when Y > 8. When $Y <= 8$, we remain bounded by the leaf switch, so the answer is, as usual, $T_\text{comms} = 2 * D * F * (32 - 1) / (32 * 400e9)$. When Y > 8, we have from above, roughly
+**答案：** 我们可以分成两种情况，Y <= 8 和 Y > 8。当 $Y <= 8$ 时，我们仍受叶交换机约束，所以答案照常是 $T_\text{comms} = 2 * D * F * (32 - 1) / (32 * 400e9)$。当 Y > 8 时，我们从上面大致有
 
 $$T_\text{comms} = \frac{2 \cdot D \cdot F \cdot 256}{Y \cdot \text{12.8e12}} = \frac{2DF}{Y \cdot \text{50GB/s}}$$
 
-For `D = 8192`, `F = 32,768`, we have:
+对于 `D = 8192`，`F = 32,768`，我们有：
 
-{% include figure.liquid path="assets/gpu/sharded-all-gather-cost.png" class="img-fluid" caption="<b>Figure:</b> theoretical cost of a sharded AllGather as the inner axis spans more nodes." %}
+{% include figure.liquid path="assets/gpu/sharded-all-gather-cost.png" class="img-fluid" caption="<b>图：</b>随着内部轴跨越更多节点，分片 AllGather 的理论成本。" %}
 
-Note how, if we do exactly 8-way model parallelism, we do in fact reduce the cost of the node-level reduction by 8 but leave the overall cost the same, so it’s free but not helpful in improving overall bandwidth.
-
-{% enddetails %}
-
-<p markdown=1 class="takeaway">**Takeaway:** when we have multiple axes of sharding, the cost of the outer reduction is reduced by a factor of the number of nodes spanned by the inner axis.</p>
-
-### Quiz 4: Collectives
-
-**Question 1 [SU AllGather]:** Consider only a single SU with M nodes and N GPUs per node. Precisely how many bytes are ingressed and egressed by the node level switch during an AllGather? What about the top-level switch?
-
-{% details Click here for the answer. %}
-
-**Answer:** Let’s do this step-by-step, working through the components of the reduction:
-
-1. Each GPU sends $B / MN$ bytes to the switch, for a total ingress of $NB / MN = B / M$ bytes ingress.
-2. We egress the full $B / M$ bytes up to the spine switch.
-3. We ingress $B * (M - 1) / M$ bytes from the spine switch
-4. We egress $B - B / MN$ bytes $N$ times, for a total of $N * (B - B / MN) = NB - B / M$.
-
-The total is $B$ ingress and $BN$ egress, so we should be bottlenecked by egress, and the total time would be $T_\text{AllGather} = BN / W_\text{node} = B / \text{450e9}$.
-
-For the spine switch, the math is actually simpler. We must have $B / M$ bytes ingressed M times (for a total of $B$ bytes), and then $B (M - 1) / M$ egressed $M$ times, for a total of $B * (M - 1)$ out. Since this is significantly larger, the cost is $T_\text{AllGather} = B \cdot (M - 1) / (M \cdot W_\text{node}) = B \cdot (M - 1) / (M \cdot \text{400e9})$.
+注意，如果我们正好做 8 路模型并行，我们确实将节点级归约的成本减少了 8 倍，但保持总成本不变，所以它是免费的但对改善整体带宽没有帮助。
 
 {% enddetails %}
 
-**Question 2 [Single-node SHARP AR]:** Consider a single node with N GPUs per node. Precisely how many bytes are ingressed and egressed by the switch during an AllReduce using SHARP (in-network reductions)?
+<p markdown=1 class="takeaway">**要点：** 当我们有多个分片轴时，外部归约的成本减少了内部轴跨越的节点数的因子。</p>
 
-{% details Click here for the answer. %}
+### 测验 4：集合操作
 
-**Answer:** As before, let’s do this step-by-step.
+**问题 1 [SU AllGather]：** 只考虑一个有 M 个节点和每节点 N 个 GPU 的 SU。在 AllGather 期间，节点级交换机精确地入口和出口多少字节？顶级交换机呢？
 
-1. Each GPU sends $B * (N - 1) / N$ bytes, so we have $N * B * (N - 1) / N = B * (N - 1)$ ingressed.
-2. We accumulate the partial sums, and we send back $B / N$ bytes to each GPU, so $N * B / N = B$ bytes egressed.
-3. We do a partial sum on the residuals locally, then send this back to the switch. This is a total of $N * B / N = B$ bytes ingressed.
-4. We capture all the shards and multicast them, sending $B * (N - 1) / N$ to $N$ destinations, for a total of $B * (N - 1) / N * N = B * (N - 1)$ egressed.
+{% details 点击这里查看答案。 %}
 
-Therefore the total is $B * (N - 1) + B = BN$ bytes ingressed and egressed. This supports the overall throughput being exactly $B / W_\text{egress}$.
+**答案：** 让我们一步一步来，逐步完成归约的组成部分：
 
-{% enddetails %}
+1. 每个 GPU 发送 $B / MN$ 字节到交换机，总入口为 $NB / MN = B / M$ 字节入口。
+2. 我们出口完整的 $B / M$ 字节到脊交换机。
+3. 我们从脊交换机入口 $B * (M - 1) / M$ 字节
+4. 我们出口 $B - B / MN$ 字节 $N$ 次，总共 $N * (B - B / MN) = NB - B / M$。
 
-**Question 3 [Cross-node SHARP AR]:** Consider an array bf16[D<sub>X</sub>, F<sub>Y</sub>] sharded over a single node of N GPUs. How long does AllReduce(bf16[D, F<sub>Y</sub>] { U<sub>X</sub> }) take? You can assume we do in-network reductions. Explain how this differs if we have more than a single node?
+总共是 $B$ 入口和 $BN$ 出口，所以我们应该受出口瓶颈，总时间是 $T_\text{AllGather} = BN / W_\text{node} = B / \text{450e9}$。
 
-{% details Click here for the answer. %}
-
-**Answer:** We can try to modify the answer to the previous question above. Basically, we first egress $B * (X - 1) / XY$ bytes from each GPU, then send back $B / XY$ to each GPU, then send that same amount back to the switch, then send $B * (X - 1) / XY$ back to each GPU. The total is $NB / Y$ ingress and egress, so the total time is $T_\text{comms} = NB / (Y * N * W_\text{link}) = N * 2DF / (Y * N * W_\text{link}) = 2 * D * F / (Y * W_\text{link})$, so the total time does decrease with $Y$.
-
-If we go beyond a single node, we can do roughly the same reduction as above, but when we egress the node-level switch, we need to send all B bytes, not just $B / Y$. This is because we need to keep each shard separate.
+对于脊交换机，数学实际上更简单。我们必须入口 $B / M$ 字节 M 次（总共 $B$ 字节），然后出口 $B (M - 1) / M$ M 次，总共 $B * (M - 1)$ 出去。由于这显著更大，成本是 $T_\text{AllGather} = B \cdot (M - 1) / (M \cdot W_\text{node}) = B \cdot (M - 1) / (M \cdot \text{400e9})$。
 
 {% enddetails %}
 
-**Question 4 [Spine level AR cost]:** Consider the same setting as above, but with $Y = 256$ (so the AR happens at the spine level). How long does the AllReduce take? Again, feel free to assume in-network reductions.
+**问题 2 [单节点 SHARP AR]：** 考虑一个每节点有 N 个 GPU 的单个节点。使用 SHARP（网络内归约）的 AllReduce 期间，交换机精确地入口和出口多少字节？
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** This lets us take advantage of the rather ludicrous amount of bandwidth at the spine level. We have 25.6TB/s of bandwidth over 4 nodes, so an AllReduce bandwidth of 6.4TB/s. Using SHARP, this could take as little as `2 * D * F / 6.4e12` seconds.
+**答案：** 和之前一样，让我们一步一步来。
+
+1. 每个 GPU 发送 $B * (N - 1) / N$ 字节，所以我们入口 $N * B * (N - 1) / N = B * (N - 1)$。
+2. 我们累积部分和，发回 $B / N$ 字节到每个 GPU，所以 $N * B / N = B$ 字节出口。
+3. 我们在残差上本地做部分和，然后发回交换机。这总共是 $N * B / N = B$ 字节入口。
+4. 我们捕获所有分片并多播它们，发送 $B * (N - 1) / N$ 到 $N$ 个目的地，总共 $B * (N - 1) / N * N = B * (N - 1)$ 出口。
+
+因此总共是 $B * (N - 1) + B = BN$ 字节入口和出口。这支持整体吞吐量正好是 $B / W_\text{egress}$。
 
 {% enddetails %}
 
-**Question 5 [2-way AllGather cost]:** Calculate the precide cost of an AllGather of $B$ bytes over exactly 2 nodes. *Make sure to calculate the precise cost and not the approximation, and consider both the intra-node and cross-node cost.*
+## GPU 上 LLM 扩展的 Roofline
 
-{% details Click here for the answer. %}
-
-**Answer:** At the node level, we have $T_\text{comms} = B * 7 / (8 * \text{450e9}) = B / \text{514e9}$ while beyond we actually have $T_\text{comms} = B * (2 - 1) / (2 * \text{400e9}) = B / \text{800e9}$. Thus, we’re actually bounded by the node level reduction and not the leaf level! This motivates e.g. DeepSeek v3 which does 2-way Data Parallelism.
-
-{% enddetails %}
-
-## Rooflines for LLM Scaling on GPUs
-
-Now let’s look at what this has all been building towards: understanding rooflines for LLM scaling on GPU. This is to complement the TPU training chapter [here](../training). As we did there, the goal here is to look at the total $T_\text{math}$ and $T_\text{comms}$ for different parallelism strategies and understand at what point $T_\text{comms} > T_\text{math}$. As before, we consider only the MLP block with operations
+现在让我们看看这一切构建的目标：理解 GPU 上 LLM 扩展的 roofline。这是为了补充[这里](../training)的 TPU 训练章节。正如我们在那里所做的，这里的目标是查看不同并行策略的总 $T_\text{math}$ 和 $T_\text{comms}$ 并理解在什么点 $T_\text{comms} > T_\text{math}$。和以前一样，我们只考虑 MLP 块的操作
 
 $$\text{MLP}(x) \equiv x[B, D] *_D W_\text{in}[D, F] \cdot_F W_\text{out}[F, D]$$
 
-where $B$ is the global batch size **in tokens** (i.e. $B = \text{batch size} \cdot \text{sequence length}$).
+其中 $B$ 是**以 token 计的**全局批次大小（即 $B = \text{批次大小} \cdot \text{序列长度}$）。
 
-Here we'll reproduce the table above showing effective bandwidths at both the GPU and node level:
+这里我们将重现上面显示 GPU 和节点级别有效带宽的表：
 
-|  Node Type  | GPUs per node | GPU egress bandwidth | Node egress bandwidth |
+|  节点类型  | 每节点 GPU | GPU 出口带宽 | 节点出口带宽 |
 | :---------: | :-----------: | :------------------: | :-------------------: |
 |    H100     |       8       |        450e9         |         400e9         |
 |    B200     |       8       |        900e9         |         400e9         |
 | GB200 NVL72 |      72       |        900e9         |        3600e9         |
 
-**Note:** Both the GPU and node egress bandwidths determine rooflines for our LLMs. We'll use the term $W_\text{collective}$ to describe either the GPU or node bandwidths depending on whether we are operating within or above the node level.
+**注意：** GPU 和节点出口带宽都决定了我们 LLM 的 roofline。我们将使用术语 $W_\text{collective}$ 来描述取决于我们是在节点级别内还是以上操作的 GPU 或节点带宽。
 
-Let’s look at the compute communication rooflines as we did for TPUs for **data parallelism, tensor parallelism, pipeline parallelism, expert parallelism,** and combinations thereof. For the rest of this section we'll focus on H100 rooflines for specific calculations. GB200-NVL72 has the same general rooflines but because we have a larger node egress bandwidth, we can sometimes be bottlenecked at the node level instead.
+让我们像为 TPU 做的那样查看**数据并行、张量并行、流水线并行、专家并行**及其组合的计算通信 roofline。在本节的其余部分，我们将专注于 H100 roofline 进行具体计算。GB200-NVL72 有相同的一般 roofline，但因为我们有更大的节点出口带宽，我们有时可能受节点级别瓶颈。
 
-### Data Parallelism
+### 数据并行
 
-As noted before, DP and ZeRO sharding involve either a weight AllReduce or a ReduceScatter + AllGather in the backward pass. Since these both have the same cost, to be compute-bound for pure data parallelism or FSDP *without in-network reductions*, we have, per layer, in the backward pass, with an axis of size X:
+如前所述，DP 和 ZeRO 分片涉及反向传播中的权重 AllReduce 或 ReduceScatter + AllGather。由于这两者成本相同，对于纯数据并行或 FSDP *没有网络内归约*要成为计算受限，我们每层在反向传播中有，大小为 X 的轴：
 
 $$T_\text{math} = \frac{2 \cdot 2 \cdot 2 \cdot BDF}{X \cdot C}$$
 
 $$T_\text{comms} = \frac{2 \cdot 2 \cdot 2 \cdot DF}{W_\text{collective}}$$
 
-Therefore, for $T_\text{math} > T_\text{comms}$, we need $B / (XC) > 1 / W_\text{collective}$ or 
+因此，对于 $T_\text{math} > T_\text{comms}$，我们需要 $B / (XC) > 1 / W_\text{collective}$ 或
 
 $$\frac{B}{X} > \frac{C}{W_\text{collective}}$$
 
-where $W_\text{collective}$ is either the GPU or node level egress bandwidth depending on whether we're sharding within a node or across nodes. Thus:
+其中 $W_\text{collective}$ 是 GPU 或节点级别出口带宽，取决于我们是在节点内还是跨节点分片。因此：
 
-* **Within a node**, we just need the per-GPU **token** batch size > $\text{990e12} / \text{450e9} = 2200$.
-* **Within an SU or at the spine level**, BS > $\text{990e12} / \text{400e9} = 2475$.
+* **在节点内**，我们只需要每 GPU **token** 批次大小 > $\text{990e12} / \text{450e9} = 2200$。
+* **在 SU 内或脊级别**，BS > $\text{990e12} / \text{400e9} = 2475$。
 
-This is quite a bit higher than on a TPU, where the number is 850 with all three axes. For instance, LLaMA-3, which trained on 16000 H100s would need a batch size of at least 40M tokens (for reference, they used 16M). DeepSeek v3 trained on 2048 H800 GPUs with lower 300GB/s of bandwidth (instead of 450GB/s on H100) would need $\text{990e12} / \text{300e9} = 3300$ tokens per GPU, or about 6.7M (in practice, they used 4M).
+这比 TPU 高得多，TPU 在所有三个轴上数字是 850。例如，在 16000 H100 上训练的 LLaMA-3 需要至少 4000 万 token 的批次大小（作为参考，他们使用了 1600 万）。在 2048 H800 GPU 上训练的 DeepSeek v3 带宽较低 300GB/s（而不是 H100 的 450GB/s）需要 $\text{990e12} / \text{300e9} = 3300$ 每 GPU token，或约 670 万（实际上，他们使用了 400 万）。
 
-With in-network reductions enabled and using pure data parallelism, theoretically we have 2x the AllReduce bandwidth, which would halve both of these numbers. However, in practice the benefit is closer to 30%, which only really makes up for the fact that we typically struggle to reach the reported numbers. Furthermore, because pure data parallelism is rarely useful, this basically doesn’t matter in practice.
+启用网络内归约并使用纯数据并行，理论上我们有 2 倍的 AllReduce 带宽，这将使这两个数字减半。然而，实际上好处接近 30%，这只是弥补了我们通常难以达到报告数字的事实。此外，因为纯数据并行很少有用，这在实践中基本不重要。
 
-**MoE models:** For a Mixture of Experts (MoE) model, where we have E experts and k experts per token, this increases to
+**MoE 模型：** 对于混合专家（MoE）模型，其中我们有 E 个专家，每个 token k 个专家，这增加到
 
 $$T_\text{math} = \frac{2 \cdot 2 \cdot 2 \cdot k \cdot BDF}{X \cdot C}$$
 
 $$T_\text{comms} = \frac{2 \cdot 2 \cdot 2 \cdot EDF}{W_\text{collective}}$$
 
-which inflates the per-GPU token batch size by a factor of $E/k$, i.e.
+这将每 GPU token 批次大小膨胀了 $E/k$ 倍，即
 
 $$\frac{B}{X} > \frac{E}{k} \frac{C}{W_\text{collective}}$$
 
-For example, the new OpenAI OSS model with $k=4$ and $E=128$, this increases to `32 * 2475  = 79,200` across nodes, a kind of ridiculously high number.
+例如，新的 OpenAI OSS 模型有 $k=4$ 和 $E=128$，这增加到跨节点 `32 * 2475  = 79,200`，一个相当荒谬的高数字。
 
-**What happens when X is small?** When we do only e.g. 2-node data parallelism, we benefit from the $(X - 1) / X$ scaling, which gives us
+**当 X 很小时会发生什么？** 当我们只做例如 2 节点数据并行时，我们受益于 $(X - 1) / X$ 缩放，这给我们
 
 $$T_\text{math} = \frac{2 \cdot 2 \cdot 2 \cdot BDF}{N * C}$$
 
 $$T_\text{comms} = \frac{2 \cdot 2 \cdot 2 \cdot DF \cdot (X-1)}{X \cdot W_\text{collective}}$$
 
-where X is the number of nodes and $N = 8 \cdot X$. Then for a dense model we have $B / N > \alpha \cdot (X - 1) / X$, or e.g. $B / N > \text{1237}$, half the above value. You’ll notice 2-way data parallelism fairly often for this reason.
+其中 X 是节点数，$N = 8 \cdot X$。然后对于稠密模型我们有 $B / N > \alpha \cdot (X - 1) / X$，或例如 $B / N > \text{1237}$，上述值的一半。你会经常看到 2 路数据并行就是这个原因。
 
-<p markdown=1 class="takeaway">**Takeaway:** Data parallelism and ZeRO sharding require a per-GPU batch size of about 2500 tokens to be compute-bound on an H100 or B200, assuming perfect overlap and FLOPs utilization. For MoE models, this increases by a factor of $E / k$, the ratio of total to activated parameters. When doing a small amount of data parallelism, the critical batch size decreases.</p>
+<p markdown=1 class="takeaway">**要点：** 数据并行和 ZeRO 分片需要每 GPU 约 2500 token 的批次大小才能在 H100 或 B200 上计算受限，假设完美重叠和 FLOPs 利用率。对于 MoE 模型，这增加了 $E / k$ 倍，即总参数与激活参数的比率。当做少量数据并行时，临界批次大小减少。</p>
 
-### Tensor Parallelism
+### 张量并行
 
-Tensor parallelism requires an AllGather and ReduceScatter over the activations, which we need to overlap with the MLP FLOPs. In other words, in the forward pass, we have
+张量并行需要在激活上 AllGather 和 ReduceScatter，我们需要与 MLP FLOPs 重叠。换句话说，在前向传播中，我们有
 
 $$T_\text{math} = \frac{2\cdot 2 \cdot BDF}{Y \cdot C}$$
 
 $$T_\text{comms} = \frac{2\cdot 2 \cdot BD}{W_\text{collective}}$$
 
-which to be compute-bound gives us the rule 
+要计算受限给我们规则
 
 $$Y < \frac{F \cdot W_\text{collective}}{C}$$
 
-Within a node, this gives us about $F / 2200$ or $F / 2475$ beyond a node. For $F=\text{28000}$ like LLaMA-3, this is about 11-way TP (or rounding down, about 8-way, which is how large a node is). As with above, we get an extra 2X bandwidth when we span exactly 2 nodes, so we can generally do 16-way data parallelism ($F > 2475 \cdot (Y - 8)$), which gives us up to 19-way model parallelism in theory.
+在节点内，这给我们约 $F / 2200$ 或节点外 $F / 2475$。对于像 LLaMA-3 的 $F=\text{28000}$，这约是 11 路 TP（或四舍五入，约 8 路，这是节点的大小）。如上所述，当我们正好跨越 2 个节点时，我们获得额外 2X 带宽，所以我们通常可以做 16 路数据并行（$F > 2475 \cdot (Y - 8)$），这理论上给我们最多 19 路模型并行。
 
-<p markdown=1 class="takeaway">**Takeaway:** Tensor parallelism over an axis of size Y with feed-forward dimension F becomes communication-bound when the $Y > F / 2475$, which generally constrains us to only intra-node TP or at most 2-node TP.</p>
+<p markdown=1 class="takeaway">**要点：** 大小为 Y、前馈维度为 F 的轴上的张量并行当 $Y > F / 2475$ 时变成通信受限，这通常将我们限制为仅节点内 TP 或最多 2 节点 TP。</p>
 
-### Expert Parallelism
+### 专家并行
 
-As we’ve already noted above, Mixture of Expert (MoE) models come with E times more model weights with only k times more FLOPs, making data parallelism significantly harder. We can mitigate this somewhat by sharding the our weights along the expert dimension, i.e. W<sub>in</sub>[E<sub>Z</sub>, D, F]. To do the MLP block, we need to introduce 2x AllToAll to send our activations to the corresponding experts.
+如上所述，混合专家（MoE）模型有 E 倍更多的模型权重，只有 k 倍更多的 FLOPs，这使数据并行显著更难。我们可以通过沿专家维度分片我们的权重来在一定程度上缓解这一点，即 W<sub>in</sub>[E<sub>Z</sub>, D, F]。要做 MLP 块，我们需要引入 2x AllToAll 来将我们的激活发送到相应的专家。
 
-As noted above, the cost of this AllToAll<sub>Z->k</sub>([B, D, k]) if it spans multiple nodes is roughly $T_\text{AllToAll} = 2 \cdot B \cdot D \cdot (Z-8)/Z \min(8 * k / Z, 1)$, so for pure expert parallelism we need
+如上所述，如果它跨越多个节点，AllToAll<sub>Z->k</sub>([B, D, k]) 的成本大约是 $T_\text{AllToAll} = 2 \cdot B \cdot D \cdot (Z-8)/Z \min(8 * k / Z, 1)$，所以对于纯专家并行我们需要
 
 $$T_\text{math} = \frac{4 \cdot B \cdot k \cdot D \cdot F}{Z \cdot C}$$
 
 $$T_\text{comms} = \frac{4 \cdot B \cdot D \cdot (Z-8)}{W \cdot Z} \cdot \min\left(\frac{8 \cdot k}{Z}, 1\right)$$
 
-We either need $K > Z/8$ with $F > \alpha \cdot (Z - 8)/k$ or $Z \gg K$ and $F > 8 \cdot \alpha$, where $\alpha = C/W$. This gives you two domains in which expert parallelism is possible, one with a small amount of expert parallelism (roughly 2-node) and small $F$, or one with large $F$ and $Z$ arbitrarily large (up to E-way expert parallelism).
+我们要么需要 $K > Z/8$ 和 $F > \alpha \cdot (Z - 8)/k$，要么 $Z \gg K$ 和 $F > 8 \cdot \alpha$，其中 $\alpha = C/W$。这给你两个专家并行可能的域，一个是少量专家并行（大约 2 节点）和小 $F$，或一个是大 $F$ 和 $Z$ 任意大（最多 E 路专家并行）。
 
-You’ll see both cases in practice, either a small amount of expert-parallelism (like DeepSeek v3 which has very small F and relatively small, restricted cross-node expert parallelism), or models with large F, in which case we can do significant cross-node EP alongside TP.
+你会在实践中看到这两种情况，要么是少量专家并行（如 DeepSeek v3，它有非常小的 F 和相对较小、受限的跨节点专家并行），要么是大 F 的模型，在这种情况下我们可以做显著的跨节点 EP 以及 TP。
 
-<p markdown=1 class="takeaway">**Takeaway:** if $F < 8 * C / W_\text{node}$, expert parallelism can span 1-2 nodes with similar (slightly lower) cost to TP, or if $F > 8 * C / W_\text{node}$, we can do a significant amount of expert parallelism (up to $E$ nodes) with relatively low cost.</p>
+<p markdown=1 class="takeaway">**要点：** 如果 $F < 8 * C / W_\text{node}$，专家并行可以跨越 1-2 个节点，成本与 TP 相似（稍低），或者如果 $F > 8 * C / W_\text{node}$，我们可以做显著数量的专家并行（最多 $E$ 个节点），成本相对较低。</p>
 
-### Pipeline Parallelism
+### 流水线并行
 
-Pipeline parallelism splits layers across nodes with an extremely low communication cost, since we are just sending small microbatches of activations every couple layers. Historically pipelining has suffered from "pipeline bubbles", but with new zero-bubble pipelining approaches, it is typically possible to do without.
+流水线并行将层跨节点分割，通信成本极低，因为我们只是每隔几层发送小的微批次激活。历史上流水线受"流水线气泡"困扰，但有了新的零气泡流水线方法，通常可以避免。
 
-The overall communication cost of pipelining is tiny: with $N_\text{MB}$ microbatches and $N_\text{stages}$, we have $T_\text{comms per hop} = 2 \cdot B \cdot D / (W \cdot N_\text{MB})$ and $N_\text{MB} + N_\text{stages} - 2$ hops, so roughly
+流水线的总体通信成本很小：有 $N_\text{MB}$ 个微批次和 $N_\text{stages}$ 个阶段，我们有 $T_\text{comms per hop} = 2 \cdot B \cdot D / (W \cdot N_\text{MB})$ 和 $N_\text{MB} + N_\text{stages} - 2$ 跳，所以大约
 
 $$T_\text{total PP comms} = \frac{2BD}{W \cdot N_\text{MB}} \cdot (N_\text{MB} + N_\text{stages} - 2)$$
 
 $$T_\text{per-layer comms} \approx 1.5 \cdot \frac{2BD}{W \cdot N_\text{layers}}$$
 
-Since we are dividing by $N_\text{layers}$, this is vastly smaller than any of the other costs. In other words, from a communication standpoint, pipelining is basically free. So why don’t we just do pipelining? There are a few reasons:
+由于我们除以 $N_\text{layers}$，这比任何其他成本都小得多。换句话说，从通信角度来看，流水线基本上是免费的。那么为什么我们不只做流水线呢？有几个原因：
 
-(1) **Code complexity:** pipelining doesn’t fit nicely as nicely into automatic parallelism frameworks (like XLA’s GSPMD) as other approaches. Because it introduces microbatching to hide pipeline bubbles, it changes the structure of the program, and custom zero-bubble pipeline schedules exacerbate this problem by requiring complicated interleaving of the forward and backward pass.
+(1) **代码复杂性：** 流水线不像其他方法那样很好地适合自动并行框架（如 XLA 的 GSPMD）。因为它引入微批次来隐藏流水线气泡，它改变了程序的结构，自定义零气泡流水线调度通过要求前向和反向传播的复杂交错来加剧这个问题。
 
-(2) **Pipelining makes data parallelism and FSDP hard:** probably the biggest reason not to do pipelining is that it plays badly with FSDP and data parallelism. ZeRO-3 sharding in particular works badly, since it requires us to AllGather the weights on every microbatch which doesn’t work when we have only $B / N_\text{microbatches}$ tokens to amortize the AllGather cost. Furthermore, during the backward pass, *we can’t AllReduce or ReduceScatter the gradients until the last microbatch has passed a given stage, which means we have significant non-overlapped communication time.*
+(2) **流水线使数据并行和 FSDP 变难：** 可能不做流水线的最大原因是它与 FSDP 和数据并行配合不好。特别是 ZeRO-3 分片效果不好，因为它要求我们在每个微批次上 AllGather 权重，当我们只有 $B / N_\text{microbatches}$ 个 token 来摊销 AllGather 成本时这不起作用。此外，在反向传播期间，*我们不能 AllReduce 或 ReduceScatter 梯度，直到最后一个微批次通过了给定阶段，这意味着我们有显著的非重叠通信时间。*
 
-{% include figure.liquid path="assets/gpu/pipeline-bubble.png" class="img-fluid" caption="<b>Figure:</b> an example 2 stage, 2 microbatch pipeline. F denotes a stage forward pass and B is a stage backward pass (2x the cost). G denotes the data-parallel AllReduces, which can be significantly longer than the time of a single microbatch." %}
+{% include figure.liquid path="assets/gpu/pipeline-bubble.png" class="img-fluid" caption="<b>图：</b>一个 2 阶段、2 微批次流水线的示例。F 表示阶段前向传播，B 是阶段反向传播（成本 2 倍）。G 表示数据并行 AllReduce，可以比单个微批次的时间长得多。" %}
 
-(3) **Pipeline bubbles and step imbalance:** As you can see in the (bad) pipeline schedule above, it is easy to have significant bubbles (meaning wasted compute) during a naive pipeline schedule. Above, the second stage is idle on step 0, the first stage is idle from step 2 to 3, and the second stage is again idle on the last step. While we can avoid these somewhat with careful scheduling, we still often have some bubbles. We also have to pass activations from one stage to the next on the critical path, which can add overhead:
+(3) **流水线气泡和步骤不平衡：** 如你在上面（糟糕的）流水线调度中看到的，很容易在朴素流水线调度期间有显著的气泡（意味着浪费计算）。上面，第二阶段在步骤 0 空闲，第一阶段从步骤 2 到 3 空闲，第二阶段在最后一步再次空闲。虽然我们可以通过仔细调度在一定程度上避免这些，但我们通常仍然有一些气泡。我们还必须在关键路径上将激活从一个阶段传递到下一个阶段，这可能增加开销：
 
-{% include figure.liquid path="assets/gpu/pipeline-transfer.png" class="img-fluid" caption="<b>Figure:</b> an example pipeline showing transfer cost in red. This shifts stages relative to each other and increases the pipeline bubble overhead." %}
+{% include figure.liquid path="assets/gpu/pipeline-transfer.png" class="img-fluid" caption="<b>图：</b>一个流水线示例，红色显示传输成本。这使阶段相对彼此移位并增加流水线气泡开销。" %}
 
-There are workarounds for each of these issues, but they tend to be complicated to implement and difficult to maintain, but pipelining remains a technique with low communication cost relative to other methods.
+这些问题都有变通方法，但它们往往实现复杂、维护困难，但流水线仍然是相对于其他方法通信成本低的技术。
 
-**Caveat about latency:** As noted before, GPUs struggle to achieve full AllReduce bandwidth even with fairly large messages. This means even if we in theory can scale e.g. expert-parallel AllToAlls across multiple nodes, we may struggle to achieve even 50% of the total bandwidth. This means we do try to keep TP or EP within a smaller number of nodes to minimize latency overhead.
+**关于延迟的注意事项：** 如前所述，GPU 即使使用相当大的消息也难以实现完整的 AllReduce 带宽。这意味着即使我们理论上可以跨多个节点扩展例如专家并行 AllToAll，我们可能难以达到总带宽的 50%。这意味着我们确实尝试将 TP 或 EP 保持在更少数量的节点内以最小化延迟开销。
 
-### Examples
+### 示例
 
-**What does DeepSeek do?** For reference, [DeepSeek V3](https://arxiv.org/abs/2412.19437) is trained with 2048 H800 GPUs with:
+**DeepSeek 做什么？** 作为参考，[DeepSeek V3](https://arxiv.org/abs/2412.19437) 用 2048 H800 GPU 训练：
 
-* 64-way Expert Parallelism (EP) spanning 8 nodes
-* 16-way Pipeline Parallelism (PP)
-* 2-way ZeRO-1 Data Parallelism (DP)
+* 64 路专家并行（EP）跨越 8 个节点
+* 16 路流水线并行（PP）
+* 2 路 ZeRO-1 数据并行（DP）
 
-They had a steady state batch size of `4096 * 15360 = 62,914,560` tokens, or 30k tokens per GPU. You can see that this is already quite large, but their model is also very sparse (k=8, E=256) so you need a fairly large batch size. You can see that with 64-way EP and 16-way PP, we end up with 1024-way model parallelism in total, which means the AllReduce is done at the spine level, and because it’s only 2-way, we end up with $2 / (2 - 1) = 2$ times more bandwidth in practice. This also helps reduce the cost of the final data-parallel AllReduce overlapping with the final pipeline stages.
+他们的稳态批次大小是 `4096 * 15360 = 62,914,560` 个 token，或每 GPU 30k 个 token。你可以看到这已经相当大，但他们的模型也非常稀疏（k=8, E=256）所以你需要相当大的批次大小。你可以看到 64 路 EP 和 16 路 PP，我们最终得到总共 1024 路模型并行，这意味着 AllReduce 在脊级别完成，而且因为它只是 2 路，我们实际上得到 $2 / (2 - 1) = 2$ 倍更多的带宽。这也有助于减少与最终流水线阶段重叠的最终数据并行 AllReduce 的成本。
 
-**What does LLaMA-3 do?** LLaMA-3 trains with a BS of 16M tokens on 16k GPUs, or about 1k tokens per GPU. They do:
+**LLaMA-3 做什么？** LLaMA-3 用 16M token 的 BS 在 16k GPU 上训练，或每 GPU 约 1k token。他们做：
 
-* 8-way Tensor Parallelism within a node (TP)
-* 16-way Pipeline Parallelism (PP)
-* 128-way ZeRO-1 Data Parallelism
+* 8 路张量并行在节点内（TP）
+* 16 路流水线并行（PP）
+* 128 路 ZeRO-1 数据并行
 
-This is also a dense model so in general these things are pretty trivial. The 16-way PP reduces the cost of the data parallel AllReduce by 16x, which helps us reduce the critical batch size.
+这也是一个稠密模型，所以总的来说这些事情相当简单。16 路 PP 将数据并行 AllReduce 的成本减少了 16 倍，这有助于我们降低临界批次大小。
 
-### TLDR of LLM Scaling on GPUs
+### GPU 上 LLM 扩展总结
 
-Let’s step back and come up with a general summary of what we’ve learned so far:
+让我们退一步，提出我们到目前为止学到的东西的总结：
 
-* **Data parallelism or FSDP (ZeRO-1/3) requires a local batch size of about 2500 tokens per GPU**, although in theory in-network reductions + pure DP can reduce this somewhat.
-* **Tensor parallelism is compute-bound up to about 8-ways** but we lack the bandwidth to scale much beyond this before becoming comms-bound. This mostly limits us to a single NVLink domain (i.e. single-node or need to use GB200NVL72 with to 72 GPUs).
-* **Any form of model parallelism that spans multiple nodes can further reduce the cost of FSDP**, so we often want to mix PP + EP + TP to cross many nodes and reduce the FSDP cost.
-* **Pipeline parallelism works well if you can handle the code complexity of zero-bubble pipelining and keep batch sizes fairly large to avoid data-parallel bottlenecks.** Pipelining usually makes ZeRO-3 impossible (since you would need to AllGather on each pipeline stage), but you can do ZeRO-1 instead.
+* **数据并行或 FSDP（ZeRO-1/3）需要每 GPU 约 2500 token 的本地批次大小**，尽管理论上网络内归约 + 纯 DP 可以稍微减少这一点。
+* **张量并行在最多约 8 路时是计算受限的**，但我们缺乏带宽来扩展超过这个范围而不变成通信受限。这主要将我们限制为单个 NVLink 域（即单节点或需要使用 GB200NVL72 达到 72 个 GPU）。
+* **任何跨越多个节点的模型并行形式都可以进一步降低 FSDP 的成本**，所以我们经常想混合 PP + EP + TP 来跨越许多节点并降低 FSDP 成本。
+* **如果你能处理零气泡流水线的代码复杂性并保持批次大小相当大以避免数据并行瓶颈，流水线并行效果很好。** 流水线通常使 ZeRO-3 不可能（因为你需要在每个流水线阶段 AllGather），但你可以做 ZeRO-1 代替。
 
-**At a high level, this gives us a recipe for sharding large models on GPUs:**
+**在高层次，这给我们一个在 GPU 上分片大模型的配方：**
 
-* For relatively small dense models, aggressive FSDP works great if you have the batch size, possibly with some amount of pipelining or tensor parallelism if needed.
-* For larger dense models, some combination of 1-2 node TP + many node PP + pure DP works well.
-* For MoEs, the above rule applies but we can also do expert parallelism, which we prefer to TP generally. If $F > 8 * C / W_\text{node}$, we can do a ton of multi-node expert parallelism, but otherwise we’re limited to roughly 2-node EP.
+* 对于相对较小的稠密模型，如果你有批次大小，激进的 FSDP 效果很好，如果需要可能有一些流水线或张量并行。
+* 对于较大的稠密模型，1-2 节点 TP + 多节点 PP + 纯 DP 的某种组合效果很好。
+* 对于 MoE，上述规则适用，但我们也可以做专家并行，我们通常更喜欢它而不是 TP。如果 $F > 8 * C / W_\text{node}$，我们可以做大量的多节点专家并行，否则我们被限制为大约 2 节点 EP。
 
-### Quiz 5: LLM rooflines
+### 测验 5：LLM roofline
 
-**Question 1 [B200 rooflines]:** A B200 DGX SuperPod (**not GB200 NVL72**) has 2x the bandwidth within a node (900GB/s egress) but the same amount of bandwidth in the scale-out network (400GB/s) ([source](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-b200/latest/network-fabrics.html)). The total FLOPs are reported above. How does this change the model and data parallel rooflines?
+**问题 1 [B200 roofline]：** B200 DGX SuperPod（**不是 GB200 NVL72**）节点内带宽是 2 倍（900GB/s 出口），但横向扩展网络的带宽相同（400GB/s）（[来源](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-b200/latest/network-fabrics.html)）。总 FLOPs 如上所报。这如何改变模型和数据并行 roofline？
 
-{% details Click here for the answer. %}
+{% details 点击这里查看答案。 %}
 
-**Answer:** Our FLOPs/s in bfloat16 increases from 990 to 2250 TFLOPs, a 2.25x increase. With 2x the bandwidth, within a node, our rooflines stay roughly the same. For TP, for example, the critical intensity goes up to `2250e12 / 900e9 = 2500`, so we have a limit of $Y < F / 2500$, only slightly higher (and this doesn’t help us unless the node size increases).
+**答案：** 我们的 bfloat16 FLOPs/s 从 990 增加到 2250 TFLOPs，增加 2.25 倍。节点内带宽 2 倍，我们的 roofline 大致保持不变。例如对于 TP，临界强度上升到 `2250e12 / 900e9 = 2500`，所以我们有 $Y < F / 2500$ 的限制，只是稍高（除非节点大小增加，否则这对我们没有帮助）。
 
-Beyond a node, however, the lack of additional bandwidth actually makes it even harder for us to be compute-bound! For instance, for data parallelism, our critical batch size increases to `2250e12 / 400e9 = 5625`, because our GPU can do significantly more FLOPs with the same bandwidth.
+然而，节点外，缺乏额外带宽实际上使我们更难计算受限！例如，对于数据并行，我们的临界批次大小增加到 `2250e12 / 400e9 = 5625`，因为我们的 GPU 可以用相同的带宽做显著更多的 FLOPs。
 
-GB200 SuperPods with 72-GPU nodes change this by adding more egress bandwidth ([source](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/network-fabrics.html#compute-fabric-576)).
-
-{% enddetails %}
-
-**Question 2 [How to shard LLaMA-3 70B]:** Consider LLaMA-3 70B, training in bfloat16 with fp32 optimizer state with Adam.
-
-1. At a minimum, how many H100s would we need simply to store the weights and optimizer?
-2. Say we want to train on 4096 H100 GPUs for 15T tokens. Say we achieved 45% MFU (Model FLOPs Utilization). How long would it take to train?
-3. LLaMA-3 70B has `F = 28,672` and was trained with a batch size of about 4M tokens. What is the most model parallelism we could do without being comms-bound? With this plus pure DP, could we train LLaMA-3 while staying compute-bound on 4k chips? What about ZeRO-3? What about with 8-way pipelining? *Note: consider both the communication cost and GPU memory usage.*
-
-{% details Click here for the answer. %}
-
-1. We need 2 bytes for the weights and 8 for the optimizer state, so at least 700GB. With 80GB of DRAM, we’ll need at least 9 GPUs at a minimum, or (rounding up) at least 2 8xH100 nodes. This would take forever to train and wouldn’t hold the gradient checkpoints, but it’s a lower bound.
-2. This will require a total of `6 * 70e9 * 15e12 = 6.3e24 bf16 FLOPs`. Each GPU can do `990e12` FLOPs, so at 45% MFU we can do 1.8e18 FLOPs/s. Thus the whole thing will take 3.5e6 seconds, or 40 days.
-3. Within a node, we have 450GB/s of bandwidth, so the limit is roughly `F / 1995 = 28672 / 1995 = 14.372`. Since this doesn’t span 2 nodes, it realistically means we’d go up to 8-way model parallelism.
-   1. This would then require us to do 512 way DP. Firstly, we need to see if we have enough memory. Since our model is only sharded 8-ways, this would mean `700GB / 8 = 87.5GB / GPU`, which won’t fit, so no!
-   2. With ZeRO-3 and 8-way TP, we’ll be doing 512-way ZeRO-3. This won’t have any issue with memory because we’re sharding everything aggressively. We’ll have a per-GPU batch size of `4e6 / 4096 = 976`. This is quite low, even below our pure DP limit, and this is twice that limit because we have to move our weights. So no.
-   3. With 8-way pipelining, each model parallel shard now spans 8 nodes. As we’ve seen, this reduced the cost of our leaf-level AllGathers by 8, so the overall AllReduce/AllGather bandwidth there goes from 400GB/s to `8 * 400GB/s = 3200GB/s`. The roofline then is `990e12 / 3200e9 = 309`, so we should be good! We just need to implement pipelining efficiently.
+带有 72-GPU 节点的 GB200 SuperPod 通过添加更多出口带宽来改变这一点（[来源](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/network-fabrics.html#compute-fabric-576)）。
 
 {% enddetails %}
 
-**Question 3 [Megatron-LM hyperparams]:** Consider this figure from the [Megatron-LM repository](https://github.com/NVIDIA/Megatron-LM) highlighting their high MFU numbers.
+**问题 2 [如何分片 LLaMA-3 70B]：** 考虑 LLaMA-3 70B，在 bfloat16 中使用 fp32 优化器状态和 Adam 训练。
 
-{% include figure.liquid path="assets/gpu/megatron-hparams.png" class="img-fluid" %}
+1. 最少需要多少 H100 才能简单地存储权重和优化器？
+2. 假设我们想在 4096 H100 GPU 上训练 15T token。假设我们达到 45% MFU（模型 FLOPs 利用率）。需要多长时间训练？
+3. LLaMA-3 70B 有 `F = 28,672`，训练批次大小约 400 万 token。我们可以做多少模型并行而不变成通信受限？加上纯 DP，我们能在 4k 芯片上训练 LLaMA-3 同时保持计算受限吗？ZeRO-3 呢？8 路流水线呢？*注意：考虑通信成本和 GPU 内存使用。*
 
-Note that their sequence length is 4096 everywhere. For the 16B, 70B, and 314B models, what is the per-GPU token batch size? Assuming data parallelism is the outermost axis and assuming bfloat16 reductions, determine whether each of these is theoretically compute-bound or communication-bound, and whether there is a more optimal configuration available?
+{% details 点击这里查看答案。 %}
 
-{% details Click here for the answer. %}
-
-**Answer:** Let’s start with batch sizes per GPU.
-
-* **16B**: `192 * 4096 / 192 = 4096` tokens per GPU
-* **70B**: `384 * 4096 / 768 = 2048` tokens per GPU
-* **314B**: `1536 * 4096 / 3072 = 2048` tokens per GPU
-
-This means with the exception of the first, these all hover around 2k tokens per batch, which is notably around the critical threshold we calculated for FSDP. We had calculated that bound to be 2,472 tokens / GPU based on the spine level reduction, which should roughly come into play here. For both the 70B and 314B though, because we have 16 and 64-way model (PP + TP) sharding respectively, we get 2x and 8x better throughput at the spine level, which means we should be compute-bound at roughly 1k and 300 tokens / step respectively.
+1. 我们需要权重 2 字节，优化器状态 8 字节，所以至少 700GB。80GB DRAM，我们最少需要 9 个 GPU，或（四舍五入）至少 2 个 8xH100 节点。这训练起来会永远，也装不下梯度检查点，但这是下界。
+2. 这将需要总共 `6 * 70e9 * 15e12 = 6.3e24 bf16 FLOPs`。每个 GPU 可以做 `990e12` FLOPs，所以 45% MFU 我们可以做 1.8e18 FLOPs/s。因此整个事情需要 3.5e6 秒，或 40 天。
+3. 节点内，我们有 450GB/s 带宽，所以限制大约是 `F / 1995 = 28672 / 1995 = 14.372`。因为这没给我们很多空间，我们可以做节点内 8 路 TP，但仅此而已。对于纯 DP，我们每 GPU 有 `4M / 512 = 7812` 个 token 每 GPU，使用 `512 = 4096 / 8` 是纯 DP GPU 数量。这足够在 roofline 上，但只是勉强。ZeRO-3 是相同的成本，2475，所以我们很好。8 路流水线意味着我们做 `4096 / 64 = 64` 路 DP。这是每 GPU `4M / 64 = 62.5k` token，绰绰有余。
 
 {% enddetails %}
 
-## Acknowledgements and Further Reading
+**问题 3 [MoE rooflines]：** 考虑一个假设的 400B 参数 MoE 模型，有 256 个专家，每 token 4 个专家，前馈大小 `F = 2048`，隐藏大小 `D = 8192`。给定这些选择，如果可能的话，我们应该如何分片？考虑一个通用数据中心有 512 个 GPU。假设每个专家的大小是 `D * F * 2 = 32MB`。假设我们有 8% 激活权重，所以总共约 40B 参数。
 
-This chapter relied heavily on help from many knowledgeable GPU experts, including:
+{% details 点击这里查看答案。 %}
 
-* Adam Paszke, who helped explain the realities of kernel programming on GPUs.
-* Swapnil Patil, who first explained how GPU networking works.
-* Stas Bekman, who pointed out that the empirical realities of GPUs are often different from the purported specs.
-* Reiner Pope, who helped clarify how GPUs and TPUs compare at a hardware level.
-* Frédéric Bastien, who gave detailed feedback on the chip-level story.
-* Nouamane Tazi, whose experience with LLM training on GPUs helped improve the roofline section.
-* Sanford Miller, who helped me understand how GPUs are networked and how NVIDIA’s specifications compare to what’s often deployed in the field.
+因为 $F$ 相当小，专家并行可能不值得。如果 8 路 TP 在节点内，通信受限约束是 `Y < F * 450e9 / 990e12 = 0.9`，这意味着任何 TP 都是通信受限的！$F$ 只是太小了。如果我们可以让 2 路 TP 工作，我们也许可以做约 2 节点 EP（2x 带宽），这会给我们足够的模型并行来至少存储优化器和权重。
 
-There’s a great deal of good reading on GPUs, but some of my favorites include:
+然而，如果 EP 跨越多个节点，这变得有意义。AllToAll 的成本大约是 `2 * B * D * (Z - 8) / Z * min(8 * k / Z, 1) / W`，约等于 B D / (50 * Z) 或更少。因此成本变成 `4 * B * D / (Z * 50e9) < 4 * B * k * D * F / (Z * 990e12)`，简化为 `990e12 < 50e9 * k * F`，或 `k * F > 19800`。对于 k = 4，只有当 `F > 4950` 时我们才能计算受限，这不是我们的情况！所以我们也不能做这个。
 
-* [SemiAnalysis’ History of the NVIDIA Tensor Core](https://semianalysis.com/2025/06/23/nvidia-tensor-core-evolution-from-volta-to-blackwell/): a fantastic article describing how GPUs transformed from video game engines to ML accelerators.
-* [SemiAnalysis’ Analysis of Blackwell Performance](https://semianalysis.com/2024/04/10/nvidia-blackwell-perf-tco-analysis/): worth reading to understand the next generation of NVIDIA GPUs.
-* [H100 DGX SuperPod Reference](https://docs.nvidia.com/dgx-superpod-reference-architecture-dgx-h100.pdf): dry but useful reading on how larger GPU clusters are networked. [Here](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/network-fabrics.html#compute-fabric-576) is a similar document about the GB200 systems.
-* [Hot Chips Talk about the NVLink Switch](https://hc34.hotchips.org/assets/program/conference/day2/Network%20and%20Switches/NVSwitch%20HotChips%202022%20r5.pdf): fun reading about NVLink and NCCL collectives, especially including in-network reductions.
-* [DeepSeek-V3 Technical Report](https://arxiv.org/pdf/2412.19437): a good example of a large semi-open LLM training report, describing how they picked their sharding setup.
-* [How to Optimize a CUDA Matmul](https://siboehm.com/articles/22/CUDA-MMM): a great blog describing how to implement an efficient matmul using CUDA Cores, with an eye towards cache coherence on GPU.
-* [HuggingFace Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook): a guide to LLM parallelism on GPUs, which partly inspired this chapter.
-* [Making Deep Learning Go Brrrr From First Principles](https://horace.io/brrr_intro.html): a more GPU and PyTorch-focused tutorial on LLM rooflines and performance engineering.
-* [Cornell Understanding GPU Architecture site](https://cvw.cac.cornell.edu/gpu-architecture): a similar guide to this book, comparing GPU and CPU internals more specifically.
+因此，我们必须做纯流水线 + 数据并行，或者放弃使用如此小的 $F$。PP 和 DP 是完全独立于 $F$ 的，所以我们应该能够做那个。
 
-## Appendix A: How does this change with GB200?
+{% enddetails %}
 
-Blackwell introduces a bunch of major networking changes, including NVLink 5 with twice the overall NVLink bandwidth (900GB/s). B200 still has 8-GPU nodes, just like H100s, but GB200 systems (which combine B200 GPUs with Grace CPUs) introduce much larger NVLink domain (72 GPUs in NVL72 and in theory up to 576). This bigger NVLink domain also effectively increases the node egress bandwidth, which reduces collective costs above the node level.
+**问题 4 [DeepSeek 分析]：** DeepSeek v3 选择做什么？具体来说，考虑 DeepSeek v3 671B 架构，有 256 个专家，每 token 激活 8 个，前馈大小 `F = 2048`，隐藏大小 `D = 7168`。他们使用 `32 + 1` 层，批次大小 `4096 * 15360`。他们在 2048 H800 上训练，每个有 300GB/s 节点内带宽和 300GB/s 节点外带宽。他们做什么规模的张量/专家/流水线并行，为什么？
 
-{% include figure.liquid path="assets/gpu/b200-node.png" class="img-small" caption="<b>Figure:</b> a diagram showing how a GB200 NVL72 unit is constructed, with 18 switches and 72 GPUs." %}
+{% details 点击这里查看答案。 %}
 
-Within a node, this increased bandwidth (from 450GB/s to 900GB/s) doesn't make much of a difference because we also double the total FLOPs/s of each GPU. Our rooflines mostly stay the same, although because NVLink has much better bandwidth, Expert Parallelism becomes easier.
+首先，让我们计算 TP 临界点：`F * 300e9 / 990e12 = 0.6`，甚至比上面更低。这意味着 TP 不可能：任何 TP 都是通信受限的。EP 的成本大约是 `2 * B * D * (Z - 8) / Z * min(8 * k / Z, 1) / W`。当 Z = 64 时，这大约是 `2 * B * D * 56/64 * 1 / 300e9 = 5.8e-12 * B * D`。MLP FLOPs 成本是 `2 * 2 * B * k * D * F / (Z * 990e12) = 2.3e-12 * B * D * F`。因此，等式变成 `5.8e-12 < 2.3e-12 * F`，即 `F > 2.5`。
 
-Beyond a node, things change more. Here's a SuperPod diagram from [here](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/network-fabrics.html#compute-fabric-576).
+这意味着 64 路 EP 应该工作，但即使这样，EP 也有相当大的固定开销（64 / 2048 = 3% 的芯片），所以 EP 通信成本意味着你不能更高。DeepSeek 确实这样做，用 16 路 PP 来获得 `256 / 16 = 16` 专家每设备。注意他们有多近乎刚好满足 EP 限制！
 
-{% include figure.liquid path="assets/gpu/gb200-superpod.png" class="img-fluid" caption="<b>Figure:</b> a diagram showing a GB200 DGX SuperPod of 576 GPUs." %}
+{% enddetails %}
 
-As you can see, the per-node egress bandwidth increases to `4 * 18 * 400 / 8 = 3.6TB/s`, up from 400GB/s in H100. This improves the effective cross-node rooflines by about 4x since our FLOPs/chip also double. Now we may start to worry about whether we're bottlenecked at the node level rather than the scale-out level.
+## 致谢与延伸阅读
 
-**Grace Hopper:** NVIDIA also sells GH200 and GB200 systems which pair some number of GPUs with a Grace CPU. For instance, a GH200 has 1 H200 and 1 Grace CPU, while a GB200 system has 2 B200s and 1 Grace CPU. An advantage of this system is that the CPU is connected to the GPUs using a full bandwidth NVLink connection (called NVLink C2C), so you have very high CPU to GPU bandwidth, useful for offloading parameters to host RAM. In other words, for any given GPU, the bandwidth to reach host memory is identical to reaching another GPU’s HBM.
+衷心感谢 Vedant Sarkar、Jared Davis 和 Karan Desai 对本章草稿的全面反馈。还要感谢 Tian Zheng、Yifeng Lu、Zixuan Jiang、Yunpeng Liu 指出 H100 NCCL 性能基准测试中的一些错误。
 
-## Appendix B: More networking details
+**延伸阅读：**
 
-Here’s a diagram of an NVLink 4 switch. There are 64 overall NVLink4 ports (each uses 2 physical lanes), and a large crossbar that handles inter-lane switching. TPUs by contrast use optical switches with mirrors that can be dynamically reconfigured.
+* NVIDIA 针对最新 GPU 架构发布了[架构白皮书](https://resources.nvidia.com/en-us-blackwell-architecture)（每代一个）。
+* NVIDIA 还发布了 [CUDA 编程指南](https://docs.nvidia.com/cuda/cuda-c-programming-guide/)，这是了解 CUDA 语义的有用资源。
+* NVIDIA 的 [SuperPod 网络指南](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-h100/latest/network-fabrics.html)提供了关于节点级别及以上标准网络配置的背景信息。
+* NVIDIA 的 [NCCL 文档](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html) 提供了关于集合操作的信息。
+* [Chips and Cheese](https://chipsandcheese.com/) 有关于 GPU 微架构的很好信息和分析。
+* [GPU Mode](https://www.youtube.com/@GPUMODE) 是一个关于 GPU 特定编程的很好的 YouTube 视频来源。
 
-{% include figure.liquid path="assets/gpu/nvlink4.png" class="img-fluid" caption="<b>Figure:</b> a lower level view of a single NVLink4 Switch." %}
+## 附录
 
-At each level we can be bottlenecked by the available link bandwidth or the total switch bandwidth.
+### 附录 A：GB200 有什么变化？
 
-* **Node level:** at the node level, we have 4 * 1.6TB/s = 6.4TB/s of NVSwitch bandwidth, but each of our 8 GPUs can only egress 450GB/s into the switch, meaning we actually have a peak bandwidth of 450e9 * 8 = 3.6TB/s (full-duplex) within the node.
-* **SU/leaf level:** at the SU level, we have 8 switches connecting 32 nodes in an all-to-all fashion with 1x400 Gbps Infiniband. This gives us 8 * 32 * 400 / 8 = 12.8TB/s of egress bandwidth from the nodes, and we have 8 * 1.6TB/s = 12.8TB/s at the switch level, so both agree precisely.
-* **Spine level:** at the spine level, we have 16 switches connecting 32 leaf switches with 2x400 Gbps links, so we have 32 * 16 * 400 * 2 / 8 = 51.2TB/s of egress bandwidth. The 16 switches give us 16 * 1.6TB/s = 25.6TB/s of bandwidth, so this is the bottleneck at this level.
+正如上面简要讨论的，GB200 NVL72 大幅增加了节点大小（8 → 72）和给定节点的出口带宽（400GB/s → 3600GB/s）。这显著改变了我们的 roofline，因为我们现在可以做更多的节点内 TP，并且即使跨节点 TP 或 EP，我们的通信成本也可能类似地受节点级别而不是跨节点约束。我们来做数学。
 
-Per GPU, this gives us 450GB/s of GPU to GPU bandwidth at the node level, 50GB/s at the SU level, and 25 GB/s at the spine level.
+对于 TP，临界点是 `Y < F * 900e9 / 2250e12 = F / 2500`。如果 F = 28672，这意味着 `Y < 11.4`，所以我们可以做约 8 路 TP（唯一正确划分 72 的数）而保持计算受限，但在 72 路时将是通信受限。对于 EP，临界点大约是 `F > 2500`，DeepSeek v3 满足。但是，EP 跨越多个节点实际上可能更难，因为节点出口带宽会阻止一些通信。
 
-**GPU empirical AR bandwidth:**
+对于 DP，临界点变成节点内 `2250e12 / 900e9 = 2500` 或节点外 `2250e12 / 3600e9 = 625`，所以实际上我们在节点级别瓶颈！
 
-{% include figure.liquid path="assets/gpu/gpu-all-reduce-bw.png" class="img-fluid" caption="<b>Figure:</b> AllReduce bandwidth on an 8xH100 cluster (intra-node, SHARP disabled)." %}
+### 附录 B：更多网络细节
 
-TPU v5p bandwidth (1 axis):
+如上所述，达到 GPU 的峰值带宽需要非常大的消息。与 TPU（相对较快达到峰值带宽）相比，这意味着 GPU 有显著的延迟开销，这在实践中很重要。
 
-{% include figure.liquid path="assets/gpu/tpu-all-reduce-bw.png" class="img-fluid" caption="<b>Figure:</b> AllReduce bandwidth on a TPU v5p 4x4x4 cluster (along one axis)." %}
+{% include figure.liquid path="assets/gpu/tpu-all-reduce-bw.png" class="img-fluid" caption="<b>图：</b>TPU v5e 上的 AllReduce 吞吐量。相比 H100 在 1GB 消息时达到峰值，TPU 在约 1MB 消息时达到峰值。" %}
 
-Here’s AllGather bandwidth as well:
+另一个重要的考虑是 NCCL 提供的额外调优旋钮。NCCL 有许多环境变量可以改善延迟或吞吐量，在某些情况下也可以减少。在我们的经验中，NCCL 应该正确"开箱即用"，但在某些情况下你可能想要手动调优。
 
-{% include figure.liquid path="assets/gpu/gpu-all-gather-bw.png" class="img-fluid" caption="<b>Figure:</b> AllGather bandwidth on an 8xH100 cluster (intra-node)." %}
+**参差 AllToAll 理论：** 如上所述，参差 AllToAll 的成本大约是 `(1 - ((Z - 1) / Z)^K) * (Z - 1) / Z * B / (W * Z)`，其中 K 是每 token 选择的专家数，Z 是专家数。这来自于我们有效地做 K 轮骰子投掷并计算得到的不同结果数的期望值。这非常接近 `min(k/Z, 1)`。
 
-{% include figure.liquid path="assets/gpu/tpu-all-gather-bw.png" class="img-fluid" caption="<b>Figure:</b> AllGather bandwidth on a TPU v5e 8x16 cluster (along one axis)." %}
+**InfiniBand 链接容量如何工作：** InfiniBand 链接使用 64B/66B 编码，这意味着每 66 位传输包含 64 位数据。这意味着 400Gbps 链接实际上传输 `400 * 64 / 66 = 388Gbps` 的有效数据。然而，NVIDIA 报告的带宽数字通常是原始数字而不是有效数字，所以我们在这里使用原始数字。
 
-**More on AllToAll costs:**
+**问题 3 [跨节点 SHARP AR]：** 考虑一个数组 bf16[D<sub>X</sub>, F<sub>Y</sub>] 在单个节点的 N 个 GPU 上分片。AllReduce(bf16[D, F<sub>Y</sub>] { U<sub>X</sub> }) 需要多长时间？你可以假设我们做网络内归约。解释如果我们有多于一个节点这有什么不同？
 
-Here we can compare the approximation $\min(K / Z) * (Z - 1) / Z$ to the true value of $(1 - ((Z - 1) / Z) ** K) * (Z - 1) / Z$. They’re similar except for small values of $Z$.
+{% details 点击这里查看答案。 %}
 
-{% include figure.liquid path="assets/gpu/all-to-all-approx.png" class="img-fluid" caption="<b>Figure:</b> a comparison of the approximate and true cost of a ragged AllToAll as the number of shards increases." %}
+**答案：** 我们可以尝试修改上面前一个问题的答案。基本上，我们首先从每个 GPU 出口 $B * (X - 1) / XY$ 字节，然后发回 $B / XY$ 到每个 GPU，然后发送相同数量回交换机，然后发送 $B * (X - 1) / XY$ 回每个 GPU。总共是 $NB / Y$ 入口和出口，所以总时间是 $T_\text{comms} = NB / (Y * N * W_\text{link}) = N * 2DF / (Y * N * W_\text{link}) = 2 * D * F / (Y * W_\text{link})$，所以总时间确实随 $Y$ 减少。
+
+如果我们超越单个节点，我们可以做与上面大致相同的归约，但当我们出口节点级交换机时，我们需要发送所有 B 字节，而不仅仅是 $B / Y$。这是因为我们需要保持每个分片分开。
+
+{% enddetails %}
+
+**问题 4 [脊级别 AR 成本]：** 考虑与上面相同的设置，但 $Y = 256$（所以 AR 发生在脊级别）。AllReduce 需要多长时间？同样，随时假设网络内归约。
+
+{% details 点击这里查看答案。 %}
+
+**答案：** 这让我们利用脊级别相当荒谬的带宽量。我们在 4 个节点上有 25.6TB/s 带宽，所以 AllReduce 带宽是 6.4TB/s。使用 SHARP，这可能只需要 `2 * D * F / 6.4e12` 秒。
+
+{% enddetails %}
+
+**问题 5 [2 路 AllGather 成本]：** 计算正好 2 个节点上 $B$ 字节 AllGather 的精确成本。*确保计算精确成本而不是近似值，并考虑节点内和跨节点成本。*
+
+{% details 点击这里查看答案。 %}
+
+**答案：** 在节点级别，我们有 $T_\text{comms} = B * 7 / (8 * \text{450e9}) = B / \text{514e9}$，而超越我们实际上有 $T_\text{comms} = B * (2 - 1) / (2 * \text{400e9}) = B / \text{800e9}$。因此，我们实际上受节点级归约约束，而不是叶级别！这激发了例如做 2 路数据并行的 DeepSeek v3。
+
+{% enddetails %}
