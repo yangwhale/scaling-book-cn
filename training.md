@@ -482,7 +482,7 @@ for i in range(num_layers):
 # 反向传播
 loss, dx = jax.value_and_grad(loss_fn)(x)
 for i in range(num_layers-1, -1, -1):
-    _, f_vjp = jax.vjp(layer_fn, intermediates[i+1], weights[i])
+    _, f_vjp = jax.vjp(layer_fn, intermediates[i], weights[i])
     dx, dw = f_vjp(dx)
     if i != 0:
         dx = jax.device_put(dx, jax.devices()[i-1])
@@ -519,17 +519,17 @@ for i in range(num_layers-1, -1, -1):
 
 #### 什么时候被 DCN 卡住？
 
-$$\frac{B}{切片数} > \frac{C}{W_{dcn}} = \frac{4.6 \times 10^{14}}{6.25 \times 10^9} \approx 71000$$
+$$\frac{B}{切片数} > \frac{C}{W_{dcn}} = \frac{4.59 \times 10^{14}}{6.25 \times 10^9} \approx 73440$$
 
-也就是说，**每个 Pod 至少要处理 7 万多 token**，否则 DCN 带宽不够用。
+也就是说，**每个 Pod 至少要处理 7.3 万多 token**，否则 DCN 带宽不够用。
 
-<p markdown=1 class="takeaway">**要点**：跨 Pod 数据并行，每 Pod 需要至少 7 万 token 的批次。</p>
+<p markdown=1 class="takeaway">**要点**：跨 Pod 数据并行，每 Pod 需要至少 7.3 万 token 的批次。</p>
 
 **实际例子**：
 
 训练 LLaMA-3 70B，批次 200 万 token：
 - 单 Pod（8k 芯片）：可以用 FSDP + TP，每芯片 ~250 token，刚好够
-- 两个 Pod：每 Pod 100 万 token，远超 7 万，DCN 不会是瓶颈
+- 两个 Pod：每 Pod 100 万 token，远超 7.3 万，DCN 不会是瓶颈
 
 ---
 
@@ -566,7 +566,7 @@ $$\frac{B}{切片数} > \frac{C}{W_{dcn}} = \frac{4.6 \times 10^{14}}{6.25 \time
 | DP/FSDP | B/X < C/W_ici | 每卡 < 2550 token（单轴）<br>每卡 < 850 token（三轴） |
 | 张量并行 | Y > F/2550 | 超过 8-16 路 |
 | FSDP+TP | B/N < α²/(2F) | 每卡 < 100 token |
-| 跨 Pod | B/Pod < C/W_dcn | 每 Pod < 71000 token |
+| 跨 Pod | B/Pod < C/W_dcn | 每 Pod < 73440 token |
 
 ### 内存估算
 

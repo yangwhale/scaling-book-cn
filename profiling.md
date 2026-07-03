@@ -154,7 +154,9 @@ with jax.profiler.trace("/tmp/tensorboard"):
 # 然后在终端运行：
 # tensorboard --logdir=/tmp/tensorboard
 
-# 或者在 Colab 里：
+# 或者在 Colab/Kaggle 里：
+# !pip install -U xprof
+# !pip install -U protobuf
 # %load_ext tensorboard
 # %tensorboard --logdir=/tmp/tensorboard
 ```
@@ -220,7 +222,7 @@ with jax.profiler.trace("/tmp/tensorboard"):
 - `T(2,2)`：以 2×2 块 tiling
 - 数组会被填充到能被 tiling 整除
 
-更复杂的例子：`bf16[4,8]{1,0,T(2,4)(2,1)}`
+更复杂的例子：`bf16[4,8]{1,0:T(2,4)(2,1)}`
 
 {% include figure.liquid path="assets/img/tiling2.png" class="img-fluid img-small" %}
 
@@ -252,6 +254,8 @@ HLO 操作太复杂？Graph Viewer 把它可视化了。
 
 用 [这个 Colab](https://colab.sandbox.google.com/drive/1_6krERgtolH7hbUIo7ewAMLlbA4fqEF8) 自己生成一个来玩。
 
+> **注意**：Google Colab 已不再提供 TPU v2-8 实例。要获得真实的 8 核 TPU 进行实验，可以使用 [Kaggle](https://www.kaggle.com/)（仍提供免费 TPU）或在 GCP 上创建 8 核 TPU slice。<d-footnote>如果只想在假问题上玩玩分片，可以用 CPU 模拟 8 个设备：`import jax; jax.config.update("jax_num_cpu_devices", 8)`（需要 jax >= 0.4.27 左右），然后 `print(jax.devices())`。但这只适用于小规模实验，不能反映真实性能。</d-footnote>
+
 #### FFN 块分析
 
 {% include figure.liquid path="assets/img/transformer-ffw.png" class="img-fluid" %}
@@ -259,9 +263,9 @@ HLO 操作太复杂？Graph Viewer 把它可视化了。
 放大 FFN 块。up-projection 操作：
 
 - 输入：`bf16[8, 1024, 8192]` × `bf16[8192, 16384]`
-- 输出：`bf16[32, 1024, 16384]`
+- 输出：`bf16[8, 1024, 16384]`
 
-这是 4 路 DP + 2 路 TP 分片后的本地视图。全局形状：
+这是 4 路 DP + 2 路 TP 分片后的本地视图（每分片 batch=8）。全局形状：
 
 **X**: bf16[32, 1024, 8192] × **W_in**: bf16[8192, 32768] → **Tmp**: bf16[32, 1024, 32768]
 
@@ -289,12 +293,11 @@ HLO 操作太复杂？Graph Viewer 把它可视化了。
 
 **验算**：
 
-数组大小 = 2 × 32 × 1024 × 8192 = 537MB（全局）
-每分片 = 537 / 4 = 134MB
+每分片大小 = 2 × 8 × 1024 × 8192 = 128MB
 
 单跳 ICI 带宽 = 1.2e11 B/s
 
-理论时间 = 134e6 / 1.2e11 = **1.1ms**
+理论时间 = 128e6 / 1.2e11 = **1.1ms**
 
 实际时间 = **1.13ms**
 
@@ -320,7 +323,7 @@ Q 投影用的矩阵：[d_model=8192, n_heads=32, d_qkv=256]
 
 例子里可以看到：
 - 模型参数约 7.5GB
-- 空闲约 10GB
+- 空闲约 8.5GB
 
 对调试 OOM 很有帮助：找到峰值是在哪里，是什么操作导致的。
 
@@ -367,7 +370,7 @@ AllReduce 的 replica_groups 显示 8 组 → 8 路张量并行
 
 ### 问题 2：优化 Transformer
 
-用[这个 Colab](https://colab.sandbox.google.com/drive/1_6krERgtolH7hbUIo7ewAMLlbA4fqEF8) 里的简单 Transformer：
+用[这个 Colab](https://colab.sandbox.google.com/drive/1_6krERgtolH7hbUIo7ewAMLlbA4fqEF8) 里的简单 Transformer（Colab 已不再提供 TPU v2-8，需要用 [Kaggle](https://www.kaggle.com/) 或 GCP 8 核 slice 来跑）：
 
 1. 生成基准 Profile
 2. 每个部分花了多久？应该花多久？

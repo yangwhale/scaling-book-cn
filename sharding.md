@@ -247,6 +247,8 @@ $$A[I, J] \cdot B[J, K] \to C[I, K]$$
 
 <p class="takeaway">**要点**：收缩维度分片了？先 AllGather 收集完整，再算。</p>
 
+注意：当 B 没有沿 X 分片时，还有另一种策略——先做本地乘法得到部分和，再 AllReduce 求全局和。这样计算是分片的（更快），但通信成本通常更高。不过某些情况下它反而更好——实际中 B 通常也是分片的就是了。感兴趣可以看下面的[练习题 4](#练习题)。
+
 ---
 
 **什么是 AllGather？**
@@ -350,11 +352,17 @@ AllToAll 是"重新分片"——把下标从一个维度移到另一个：
 
 $$\text{AllToAll}_{X,J}(A[I_X, J]) \to A[I, J_X]$$
 
-它比 AllGather 便宜，因为不需要把每个分片复制到所有卡：
-
-$$T_\text{AllToAll} = \frac{V}{4W}$$
+AllToAll 常见于 MoE（混合专家模型）——不同计算阶段需要不同的分片布局，靠 AllToAll 来重排。它比 AllGather 便宜，因为不需要把每个分片复制到所有卡，只是把数据发到需要它的卡上。
 
 {% include figure.liquid path="assets/img/all-to-all.gif" caption="<b>AllToAll 动画</b>：每张卡只把数据发到需要的目标卡，不是广播给所有卡。" %}
+
+推广到 ND AllToAll，设 $V$ 是**所有设备上的总字节数**（不是单卡的），网格大小 A×B×C，总设备数 $N = A \cdot B \cdot C \cdot \ldots$，成本为：
+
+$$T_\text{AllToAll} = \frac{V \cdot \max(A, B, C, \ldots)}{4 \cdot N \cdot W}$$
+
+等价地，用单卡数据量 $V/N$ 来写：$T = (V/N) \cdot \max(A, B, C, \ldots) / (4W)$。对 1D 网格，简化成 $V / (4W)$，是 AllGather 的 1/4。在 2D 网格中，成本会随最短轴变小而下降。
+
+*旁注：直觉推导——先从 1D 环 $\mathbb{Z}/N\mathbb{Z}$ 出发，随机选一对收发节点，平均距离 N/4 跳，于是成本 $(V \cdot N) / (4N)$。推广到 ND 环面，每个轴基本独立，每个节点有 $1/N$ 的数据，平均需要跳 $\max(A, B, C, \ldots) / 4$ 跳。也可以用 bisection bandwidth 来推：AllToAll 中，网格的一半要把自己一半的数据（$V/4$ 字节）发到另一半。最窄的切面垂直于最长轴，切过 $2N / \max(A, B, \ldots)$ 条链路（两个切面，算上环绕），单向带宽为 $N \cdot W / \max(A, B, \ldots)$。$V/4$ 除以这个带宽就得到上面的公式。*
 
 ### ReduceScatter 补充
 
@@ -462,7 +470,7 @@ $$\text{ReduceScatter}_{X,K}(C)\{U_X\} \to C[I, K_X]$$
 
 {% enddetails %}
 
-**题 5**：TPU v5p 4×4×4 上算 `A[I, J] · B[J, K] → C[I, K]`，最低延迟。输入可以任意分片，输出要完全复制。怎么分片？
+**题 5**：TPU v4p 4×4×4 上算 `A[I, J] · B[J, K] → C[I, K]`，最低延迟。输入可以任意分片，输出要完全复制。怎么分片？
 
 {% details 部分答案 %}
 

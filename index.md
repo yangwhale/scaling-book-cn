@@ -109,7 +109,7 @@ _styles: >
 * 跨多张 TPU 收集、分散、重新分布数据要多久？
 * 怎么高效地乘两个分布在不同设备上的矩阵？
 
-{% include figure.liquid path="assets/img/pointwise-product.gif" class="img-small" caption="<b>动图演示：</b> <a href='tpus'>第2章</a>中会讲 TPU 如何做逐元素乘法。根据数组大小和带宽，我们可能是计算受限（充分利用算力）或通信受限（被数据搬运拖慢）。" %}
+{% include figure.liquid path="assets/img/pointwise-product.gif" class="img-small" caption="<b>动图演示：</b> <a href='tpus'>第2章</a>中会讲 TPU 如何做逐元素乘法。根据数组大小和带宽，我们可能是计算受限（充分利用算力）或内存受限（被内存带宽拖慢）。" %}
 
 五年前，机器学习的模型架构百花齐放——CNN、LSTM、MLP、Transformer 都有市场。但现在基本就剩 Transformer 了<d-cite key="transformers"></d-cite>。我们觉得有必要彻底搞懂 Transformer 的每个细节：每个矩阵多大、归一化在哪里、参数和 FLOPs<d-footnote>浮点运算数（Floating point OPs），就是加法和乘法的总数。很多资料把 FLOPs 说成"每秒运算数"，我们用 FLOPs/s 来明确表示后者。</d-footnote>怎么算。[第4章](transformers)会细细拆解这些"Transformer 数学"，教你算训练和推理的参数量、FLOPs。这能告诉你模型吃多少内存、计算和通信各花多少时间、注意力和 FFN 哪个更重要。
 
