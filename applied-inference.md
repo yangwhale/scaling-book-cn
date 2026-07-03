@@ -174,7 +174,7 @@ int8 权重 + bf16 FLOPs 的临界批次大小 = 120（[第7章](../inference)�
 
 **4×2（8 张）**：
 
-$$T_{step} = \frac{112\text{GB}}{8 \times 8.1 \times 10^{11}} = 17\text{ms}$$
+$$T_{step} = \frac{112\text{GB}}{8 \times 8.2 \times 10^{11}} = 17\text{ms}$$
 
 吞吐量 = 32 / 0.017 = **1882 tok/s**（总）
 
@@ -182,7 +182,7 @@ $$T_{step} = \frac{112\text{GB}}{8 \times 8.1 \times 10^{11}} = 17\text{ms}$$
 
 **4×4（16 张）**：
 
-$$T_{step} = \frac{112\text{GB}}{16 \times 8.1 \times 10^{11}} = 8.5\text{ms}$$
+$$T_{step} = \frac{112\text{GB}}{16 \times 8.2 \times 10^{11}} = 8.5\text{ms}$$
 
 吞吐量保持 235 tok/s/chip（内存总量不变，只是加载更快）
 

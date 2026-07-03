@@ -291,7 +291,7 @@ $$T_{step} = \underbrace{\frac{B \times \text{KV 大小}}{W_{hbm}}}_{\text{注�
 
 int8 参数 = 30GB
 每序列 KV 缓存 = 100kB × 8192 = 819MB
-16 芯片总带宽 = 16 × 8.1e11 = 1.3e13 B/s
+16 芯片总带宽 = 16 × 8.2e11 = 1.3e13 B/s
 
 **批次 4**（带宽受限）：
 $$T = \frac{4 \times 819e6 + 30e9}{1.3e13} = 2.5ms$$
@@ -372,7 +372,7 @@ $$8192 \times 40 \times 128 \times 40 \times 2 \times 2 = 6.7\text{GB}$$
 | 64 | 85.8 | 111.8 | 17.0 | 3757 |
 | 240 | 321.6 | 347.6 | 53.0 | 4529 |
 
-延迟更好，吞吐量更高，批次能开更大。LLaMA-3 正是这么做的（32 个 Q 头，8 个 KV 头）。
+延迟更好，吞吐量更高，批次能开更大。LLaMA-3 8B 正是这么做的（32 个 Q 头，8 个 KV 头，[来源](https://huggingface.co/MaziyarPanahi/Llama-3-13B-Instruct-v0.1/blob/dfdeb40bdb2c149dfa399ea2be0d56eb120f0831/config.json)）。
 
 <p markdown=1 class="takeaway">**要点**：KV 缓存大小对推理性能影响巨大。小 KV = 更大批次 + 更低延迟 + 更高吞吐量。</p>
 
@@ -677,7 +677,7 @@ Engine 接口：
 
 {% details 答案 %}
 
-18.4B 字节 ÷ (16 × 8.1e11 B/s) = **1.4ms**
+18.4B 字节 ÷ (16 × 8.2e11 B/s) = **1.4ms**
 
 这是步骤延迟的下限。
 
