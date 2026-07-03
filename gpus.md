@@ -447,7 +447,7 @@ $$T_\text{AllToAll} = \frac{B \cdot (N-1)}{N^2 \cdot W} \approx \frac{B}{N \cdot
 
 理论上 AllReduce 成本减半，实际只有约 30% 改进：
 
-{% include figure.liquid path="assets/gpu/sharp-all-reduce-cost.png" class="img-fluid" caption="<b>图：</b>SHARP 的实际收益约 30%，不是理论的 50%。" %}
+{% include figure.liquid path="assets/gpu/sharp-all-reduce-cost.png" class="img-fluid" caption="<b>图：</b>SHARP 的实际收益约 30%，不是理论的 75%。" %}
 
 ### 跨节点集合操作
 

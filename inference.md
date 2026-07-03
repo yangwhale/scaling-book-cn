@@ -80,7 +80,7 @@ _styles: >
   .fake-img {
     background: #bbb;
     border: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: 0 0px 4px rgba(0, 0, 0, 1);
+    box-shadow: 0 0px 4px rgba(0, 0, 0, 0.1);
     margin-bottom: 12px;
   }
   .fake-img p {

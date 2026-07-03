@@ -2,7 +2,7 @@
 layout: distill
 title: "用 JAX 编程 TPU"
 # permalink: /main/
-description: "手把手教你用 JAX 操控 TPU！本节大部分内容参考自<a href='https://jax.readthedocs.io/en/latest/jep/14273-shard-map.html'>官方文档</a>。你可以在 <a href='https://colab.sandbox.google.com/'>Google Colab</a> 上白嫖免费 TPU 来跑这些代码。"
+description: "手把手教你用 JAX 操控 TPU！本节大部分内容参考自<a href='https://jax.readthedocs.io/en/latest/jep/14273-shard-map.html'>官方文档</a>。你可以在 <a href='https://colab.sandbox.google.com/'>Google Colab</a> 上用免费 TPU 来跑这些代码（注意：Colab 已不再提供 v2-8，可用 Kaggle 或 GCP 替代）。"
 date: 2025-02-04
 future: true
 htmlwidgets: true
@@ -207,7 +207,7 @@ mesh = jax.make_mesh((4, 2), ('X', 'Y'))
 def matmul(x, Win, Wout):
   hidden = jnp.einsum('bd,df->bf', x, Win)
   # 强制 hidden 沿 y 维度分片（编译器本来可能选别的分片）
-  hidden = jax.lax.with_sharding_constraint(hidden, jax.P('x', 'y'))
+  hidden = jax.lax.with_sharding_constraint(hidden, jax.P('X', 'Y'))
   return jnp.einsum('bf,df->bd', hidden, Wout)
 ```
 
@@ -506,7 +506,7 @@ def average(x):
 average_jit = jax.jit(average, out_shardings=jax.NamedSharding(mesh, jax.P('X','Y')))
 
 # 测试
-x = jnp.arange(8 * 64 * 8, dtype=jnp.int32).reshape(8 * 64, 8)
+x = jnp.arange(8 * 64 * 8, dtype=jnp.float32).reshape(8 * 64, 8)
 x = jax.device_put(x, jax.NamedSharding(mesh, jax.P('X','Y')))
 
 y1 = average_shmap(x)
@@ -543,7 +543,7 @@ def shift_jit(x, shift: int):
   return jnp.roll(reshaped, shift, axis=1).reshape(x.shape[0], x.shape[1])
 
 # 测试
-x = jnp.arange(8 * 64 * 8, dtype=jnp.int32).reshape(8 * 64, 8)
+x = jnp.arange(8 * 64 * 8, dtype=jnp.float32).reshape(8 * 64, 8)
 x = jax.device_put(x, jax.NamedSharding(mesh, jax.P('X','Y')))
 
 y1 = shift_shmap(x, 5)
