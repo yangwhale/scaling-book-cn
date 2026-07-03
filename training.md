@@ -1,4 +1,3 @@
-
 ---
 layout: distill
 title: "如何并行化 Transformer 训练"
