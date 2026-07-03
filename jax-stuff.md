@@ -2,7 +2,7 @@
 layout: distill
 title: "用 JAX 编程 TPU"
 # permalink: /main/
-description: "手把手教你用 JAX 操控 TPU！本节大部分内容参考自<a href='https://jax.readthedocs.io/en/latest/jep/14273-shard-map.html'>官方文档</a>。你可以在 <a href='https://colab.sandbox.google.com/'>Google Colab</a> 上白嫖免费 TPU 来跑这些代码。"
+description: "手把手教你用 JAX 操控 TPU！本节大部分内容参考自<a href='https://jax.readthedocs.io/en/latest/jep/14273-shard-map.html'>官方文档</a>。你可以在 <a href='https://colab.sandbox.google.com/'>Google Colab</a> 上用免费 TPU 来跑这些代码（注意：Colab 已不再提供 v2-8，可用 Kaggle 或 GCP 替代）。"
 date: 2025-02-04
 future: true
 htmlwidgets: true
@@ -207,7 +207,7 @@ mesh = jax.make_mesh((4, 2), ('X', 'Y'))
 def matmul(x, Win, Wout):
   hidden = jnp.einsum('bd,df->bf', x, Win)
   # 强制 hidden 沿 y 维度分片（编译器本来可能选别的分片）
-  hidden = jax.lax.with_sharding_constraint(hidden, jax.P('x', 'y'))
+  hidden = jax.lax.with_sharding_constraint(hidden, jax.P('X', 'Y'))
   return jnp.einsum('bf,df->bd', hidden, Wout)
 ```
 
@@ -231,13 +231,13 @@ mesh = jax.make_mesh(axis_shapes=(2, 2), axis_names=('X', 'Y'),
                                        axis_types=(shd.AxisType.Explicit, shd.AxisType.Explicit))
 jax.set_mesh(mesh)
 
-x = jax.device_put(np.arange(16).reshape(8, 2), jax.P('X', 'Y'))
+x = jax.device_put(np.arange(16, dtype=np.float32).reshape(8, 2), jax.P('X', 'Y'))
 
 @jax.jit
 def f(x):
-  print(jax.typeof(x))  # bfloat16[8@X,2@Y] ← 分片信息直接在类型里！
+  print(jax.typeof(x))  # float32[8@X,2@Y] ← 分片信息直接在类型里！
   out = x * 2
-  print(jax.typeof(out))  # bfloat16[8@X,2@Y] ← 逐元素操作保持分片
+  print(jax.typeof(out))  # float32[8@X,2@Y] ← 逐元素操作保持分片
   return out
 
 f(x)
@@ -455,7 +455,7 @@ np.testing.assert_array_equal(shmapped_out, expected_out)
 
 ## 练习题
 
-> **准备工作**：这些题需要多个 TPU。可以用免费的 Colab TPUv2-8，或者用 `jax.config.update('jax_num_cpu_devices', 8)` 模拟。
+> **准备工作**：这些题需要多个 TPU。Colab 已不再提供 TPU v2-8，可以用 [Kaggle](https://www.kaggle.com/)（仍提供免费 TPU）或 GCP 8 核 slice。<d-footnote>如果只想在假问题上模拟 mesh，可以用 CPU 模拟：`import jax; jax.config.update('jax_num_cpu_devices', 8)`（需要 jax >= 0.4.27 左右），但不能反映真实性能。</d-footnote>
 
 ---
 
@@ -506,7 +506,7 @@ def average(x):
 average_jit = jax.jit(average, out_shardings=jax.NamedSharding(mesh, jax.P('X','Y')))
 
 # 测试
-x = jnp.arange(8 * 64 * 8, dtype=jnp.int32).reshape(8 * 64, 8)
+x = jnp.arange(8 * 64 * 8, dtype=jnp.float32).reshape(8 * 64, 8)
 x = jax.device_put(x, jax.NamedSharding(mesh, jax.P('X','Y')))
 
 y1 = average_shmap(x)
@@ -543,7 +543,7 @@ def shift_jit(x, shift: int):
   return jnp.roll(reshaped, shift, axis=1).reshape(x.shape[0], x.shape[1])
 
 # 测试
-x = jnp.arange(8 * 64 * 8, dtype=jnp.int32).reshape(8 * 64, 8)
+x = jnp.arange(8 * 64 * 8, dtype=jnp.float32).reshape(8 * 64, 8)
 x = jax.device_put(x, jax.NamedSharding(mesh, jax.P('X','Y')))
 
 y1 = shift_shmap(x, 5)
@@ -565,7 +565,7 @@ np.testing.assert_array_equal(y1, y2)
 - **A**: `float32[S_X, D]` — 输入激活
 - **B**: `int32[S_X]` — 路由分配，`B[i]` 告诉我们第 i 个 token 该用哪个专家
 
-**目标**：返回 `Out[i] = W[B[i]] @ A[i]`
+**目标**：返回 `Out[i] = A[i] @ W[B[i]]`
 
 **(a) 本地实现**
 
@@ -611,7 +611,7 @@ def moe_local(W: jnp.ndarray, A: jnp.ndarray, B: jnp.ndarray) -> jnp.ndarray:
         return output, None
 
     output = jnp.zeros((S, F))
-    output, _ = lax.scan(expert_forward, output, jnp.arange(E))
+    output, _ = jax.lax.scan(expert_forward, output, jnp.arange(E))
 
     return output
 ```

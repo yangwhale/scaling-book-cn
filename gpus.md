@@ -192,7 +192,7 @@ GPU 使用 **SIMT**（单指令多线程）而不是 TPU 的 SIMD：
 | 维度 | GPU (H100) | TPU (v5p) | 影响 |
 |:---|:---:|:---:|:---|
 | 计算单元 | 132 个小 SM | 2 个大 TensorCore | GPU 更灵活，TPU 更易优化 |
-| 向量单元 | 528 个 Warp 调度器 | 8 个 VPU | GPU 并行度更高 |
+| 向量单元 | 528 个 Warp 调度器 | 8 个 VPU slot | GPU 并行度更高 |
 | 快速缓存 | 32MB SMEM | 128MB VMEM | TPU 缓存更大 |
 | 寄存器 | 32MB | 256kB | GPU 寄存器更多 |
 | Tensor Core/MXU | 528 个 | 8 个 | GPU 更细粒度 |
@@ -447,7 +447,7 @@ $$T_\text{AllToAll} = \frac{B \cdot (N-1)}{N^2 \cdot W} \approx \frac{B}{N \cdot
 
 理论上 AllReduce 成本减半，实际只有约 30% 改进：
 
-{% include figure.liquid path="assets/gpu/sharp-all-reduce-cost.png" class="img-fluid" caption="<b>图：</b>SHARP 的实际收益约 30%，不是理论的 50%。" %}
+{% include figure.liquid path="assets/gpu/sharp-all-reduce-cost.png" class="img-fluid" caption="<b>图：</b>SHARP 的实际收益约 30%，不是理论的 75%。" %}
 
 ### 跨节点集合操作
 
@@ -659,9 +659,10 @@ $$T_\text{per-layer comms} \approx 1.5 \cdot \frac{2BD}{W \cdot N_\text{layers}}
    每秒 = `4096 × 990e12 × 0.45 = 1.8e18`
    时间 = 3.5e6 秒 = **40 天**
 
-3. TP 限制：`F / 2200 ≈ 13`，可做 8 路节点内 TP
-   剩余 512 GPU 做 DP，每 GPU 7812 token，刚好够
-   8 路 PP 更宽松：每 GPU 62.5k token
+3. TP 限制：节点内 `F / 1995 ≈ 14`，可做 8 路节点内 TP
+   1. 纯 DP：512 路 DP，但每 GPU 需存 `700GB / 8 = 87.5GB`，超出 80GB 显存，**不行**
+   2. ZeRO-3 + 8 路 TP：512 路 ZeRO-3，每 GPU 批次 = `4M / 4096 = 976` token，远低于临界值 2200（而且 ZeRO 需搬权重，实际临界值翻倍），**通信受限**
+   3. 8 路 PP：模型分片跨 8 节点，AllGather 带宽提升到 `8 × 400 = 3200 GB/s`，临界值 = `990e12 / 3200e9 ≈ 309`，**可行！**
 
 {% enddetails %}
 

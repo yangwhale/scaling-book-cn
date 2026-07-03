@@ -98,7 +98,7 @@ $$
 - **矩阵-向量乘** $Ax$：N 次点积 = **2NP FLOPs**
 - **矩阵-矩阵乘** $AB$：M 列，每列一次矩阵-向量乘 = **2NPM FLOPs**
 
-**一般规则**：两个张量相乘时，<span style="color:red">收缩维度</span>和<span style="color:blue">批次维度</span>只算一次，其他维度全乘起来，最后乘 2。
+**一般规则**：两个张量相乘时，<span style="color:red">收缩维度</span>和<span style="color:blue">批次维度</span>只算一次，其他维度全乘起来，最后乘 2。<d-footnote><b>收缩维度（Contracting）</b>是在运算中被求和消掉的轴——它出现在两个输入中，但不出现在输出中，就像矩阵乘法的内维度。<b>批次维度（Batching）</b>是两个输入共有的、原封不动传到输出的轴，相当于独立子问题的索引，不参与 FLOP 计算中的相乘。用 einsum 的话说：同时出现在两个输入和输出中的标签是批次维度；同时出现在两个输入但不在输出中的标签是收缩维度。</d-footnote>
 
 $$
 \begin{array}{ccc}
@@ -154,6 +154,8 @@ Transformer 是当今的主流架构。这里不重新介绍它是什么（可�
 - **MHA**（多头注意力）：K=N
 - **MQA**（多查询注意力）：K=1
 - **GQA**（分组查询注意力）：1<K<N
+
+**关于 pre-norm 与 post-norm**：上图展示的是所谓"pre-norm"架构，即归一化在残差连接之前：`x + attn(norm(x))`。LLaMA-3 等现代模型用的就是这种。原始 Transformer 论文用的是"post-norm"，归一化在残差连接之后：`norm(x + attn(x))`。
 
 ---
 
@@ -231,7 +233,7 @@ $$\frac{\text{注意力 FLOPs}}{\text{矩阵乘法 FLOPs}} = \frac{12BT^2NH}{96B
 
 对于 D=8192 的大模型，这是 64K token。所以对于大模型，注意力的二次成本其实没那么可怕。
 
-对于小模型（如 D=4608 的 Gemma-27B），约 32K 时注意力就开始主导了。
+对于小模型（如 D=4608 的 Gemma-27B），约 37K 时注意力就开始主导了。
 
 ---
 
@@ -311,7 +313,7 @@ $$2 \times 8192 \times 64 \times 8192 = \textbf{8GB}$$
 
 2. 注意力占比 = 4D² / (4D² + 3DF) = 4D² / (4D² + 12D²) = **1/4**
 
-3. KV 缓存 = 2 × L × D = 2 × 64 × 4096 = **512KB/token**
+3. KV 缓存 = 2 × L × D = 2 × 64 × 4096 = **512 KiB/token**
 
 {% enddetails %}
 

@@ -174,7 +174,7 @@ int8 权重 + bf16 FLOPs 的临界批次大小 = 120（[第7章](../inference)�
 
 **4×2（8 张）**：
 
-$$T_{step} = \frac{112\text{GB}}{8 \times 8.1 \times 10^{11}} = 17\text{ms}$$
+$$T_{step} = \frac{112\text{GB}}{8 \times 8.2 \times 10^{11}} = 17\text{ms}$$
 
 吞吐量 = 32 / 0.017 = **1882 tok/s**（总）
 
@@ -182,7 +182,7 @@ $$T_{step} = \frac{112\text{GB}}{8 \times 8.1 \times 10^{11}} = 17\text{ms}$$
 
 **4×4（16 张）**：
 
-$$T_{step} = \frac{112\text{GB}}{16 \times 8.1 \times 10^{11}} = 8.5\text{ms}$$
+$$T_{step} = \frac{112\text{GB}}{16 \times 8.2 \times 10^{11}} = 8.5\text{ms}$$
 
 吞吐量保持 235 tok/s/chip（内存总量不变，只是加载更快）
 
@@ -456,7 +456,9 @@ $$T = \frac{2 \times 70 \times 10^9 \times 8192}{16 \times 1.97 \times 10^{14} \
 import numpy as np
 
 num_chips = 16
-param_count = 70e9  # int8 = 1 byte/param
+bytes_per_param = 1  # int8 = 1 byte/param
+param_count = 70e9
+param_size = bytes_per_param * param_count
 sequence_length = 8192
 
 hbm_bandwidth = 8.20e11  # v5e
@@ -472,13 +474,13 @@ def get_max_batch_size(seq_len, param_size, max_chips):
             return bs - 1
     return 1024
 
-max_bs = get_max_batch_size(sequence_length, param_count, num_chips)
+max_bs = get_max_batch_size(sequence_length, param_size, num_chips)
 batch_sizes = np.arange(1, max_bs + 1)
 
 # 各项时间
 kv_time = kv_cache_size(sequence_length * batch_sizes) / (num_chips * hbm_bandwidth)
-param_time = param_count / (num_chips * hbm_bandwidth)
-flops_time = 2 * param_count * batch_sizes / (num_chips * flops)
+param_time = param_size / (num_chips * hbm_bandwidth)
+flops_time = 2 * param_size * batch_sizes / (num_chips * flops)
 
 # 总延迟
 mlp_time = np.maximum(flops_time, param_time)

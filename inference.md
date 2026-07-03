@@ -80,7 +80,7 @@ _styles: >
   .fake-img {
     background: #bbb;
     border: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: 0 0px 4px rgba(0, 0, 0, 1);
+    box-shadow: 0 0px 4px rgba(0, 0, 0, 0.1);
     margin-bottom: 12px;
   }
   .fake-img p {
@@ -291,7 +291,7 @@ $$T_{step} = \underbrace{\frac{B \times \text{KV 大小}}{W_{hbm}}}_{\text{注�
 
 int8 参数 = 30GB
 每序列 KV 缓存 = 100kB × 8192 = 819MB
-16 芯片总带宽 = 16 × 8.1e11 = 1.3e13 B/s
+16 芯片总带宽 = 16 × 8.2e11 = 1.3e13 B/s
 
 **批次 4**（带宽受限）：
 $$T = \frac{4 \times 819e6 + 30e9}{1.3e13} = 2.5ms$$
@@ -372,7 +372,7 @@ $$8192 \times 40 \times 128 \times 40 \times 2 \times 2 = 6.7\text{GB}$$
 | 64 | 85.8 | 111.8 | 17.0 | 3757 |
 | 240 | 321.6 | 347.6 | 53.0 | 4529 |
 
-延迟更好，吞吐量更高，批次能开更大。LLaMA-3 正是这么做的（32 个 Q 头，8 个 KV 头）。
+延迟更好，吞吐量更高，批次能开更大。LLaMA-3 8B 正是这么做的（32 个 Q 头，8 个 KV 头，[来源](https://huggingface.co/MaziyarPanahi/Llama-3-13B-Instruct-v0.1/blob/dfdeb40bdb2c149dfa399ea2be0d56eb120f0831/config.json)）。
 
 <p markdown=1 class="takeaway">**要点**：KV 缓存大小对推理性能影响巨大。小 KV = 更大批次 + 更低延迟 + 更高吞吐量。</p>
 
@@ -491,7 +491,32 @@ KV 缓存也需要分片，而且尽量不要复制（太大了）。
 
 代价：每层两次 AllToAll（Q 从张量分片转批次分片，输出再转回来）。
 
-如果批次太小或上下文太长，还可以沿序列维度切 KV。
+{% details 完整算法 %}
+
+下面写出在 Y 和 Z 两个轴上做张量并行的完整注意力算法。注意 K 同时表示 key 张量和 KV 头数维度。令 M=N/K。
+
+<div markdown=1 class="algorithm">
+
+1. X[B, D] = ...（来自前一层的激活，未分片）
+2. K[B<sub>Z</sub>, S, K<sub>Y</sub>, H], V[B<sub>Z</sub>, S, K<sub>Y</sub>, H] = ...（KV 缓存，按批次分片）
+3. Q[B, N<sub>YZ</sub>, H] = X[B, D] \* W<sub>Q</sub>[D, N<sub>YZ</sub>, H]
+4. Q[B<sub>Z</sub>, N<sub>Y</sub>, H] = **AllToAll**<sub>Z->B</sub>(Q[B, N<sub>YZ</sub>, H])
+5. Q[B<sub>Z</sub>, K<sub>Y</sub>, M, H] = **Reshape**(Q[B<sub>Z</sub>, N<sub>Y</sub>, H])
+6. O[B<sub>Z</sub>, S, K<sub>Y</sub>, M] = Q[B<sub>Z</sub>, K<sub>Y</sub>, M, H] \*<sub>H</sub> K[B<sub>Z</sub>, S, K<sub>Y</sub>, H]
+7. O[B<sub>Z</sub>, S, K<sub>Y</sub>, M] = **Softmax**<sub>S</sub>(O[B<sub>Z</sub>, S, K<sub>Y</sub>, M])
+8. O[B<sub>Z</sub>, K<sub>Y</sub>, M, H] = O[B<sub>Z</sub>, S, K<sub>Y</sub>, M] \*<sub>S</sub> V[B<sub>Z</sub>, S, K<sub>Y</sub>, H]
+9. O[B, K<sub>Y</sub>, M<sub>Z</sub>, H] = **AllToAll**<sub>Z->M</sub>(O[B<sub>Z</sub>, K<sub>Y</sub>, M, H])
+10. O[B, N<sub>YZ</sub>, H] = **Reshape**(O[B, K<sub>Y</sub>, M<sub>Z</sub>, H])
+11. X[B, D] {U<sub>YZ</sub>} = W<sub>O</sub>[N<sub>YZ</sub>, H, D] \*<sub>N,H</sub> O[B, N<sub>YZ</sub>, H]
+12. X[B, D] = **AllReduce**(X[B, D] { U<sub>YZ</sub>})
+
+虽然看起来复杂，但逻辑很清晰。新增的通信操作（AllToAll）开销不大，因为只移动小的激活张量。作为回报，我们节省了大量读取 KV 缓存的内存带宽（KV 是静止的）。
+
+</div>
+
+{% enddetails %}
+
+* **序列分片**：如果批次太小或上下文太长，还可以沿序列维度切分 KV 缓存。代价是需要 AllGather Q 激活，然后以类似 Flash Attention 的方式累加 KV。
 
 ---
 
@@ -652,7 +677,7 @@ Engine 接口：
 
 {% details 答案 %}
 
-18.4B 字节 ÷ (16 × 8.1e11 B/s) = **1.4ms**
+18.4B 字节 ÷ (16 × 8.2e11 B/s) = **1.4ms**
 
 这是步骤延迟的下限。
 
@@ -704,15 +729,15 @@ Engine 接口：
 
 {% include figure.liquid path="assets/img/2d-weight-stationary.png" class="img-fluid" %}
 
-通信量随 √N 下降，比 1D Megatron 更好。当 N > 81 时值得考虑。
+通信量随 √N 下降，比 1D Megatron 更好。当 N > 72 时值得考虑。
 
 ### 附录 C：延迟受限通信
 
 当数据量很小时，通信时间被延迟（而非带宽）主导。
 
-临界点：buffer < W_ici × 1μs ≈ 45KB
+临界点：buffer < W_ici × 1μs。对于 8 路分片：buffer < 4.5×10¹⁰ × 10⁻⁶ × 8 ≈ 360KB
 
-对于 BS=16, D=8192 的 int8 激活：16×8192=131KB，已经延迟受限了。
+对于 BS=16, D=8192 的 int8 激活：16×8192=131KB < 360KB，已经延迟受限了。
 
 ### 附录 D：推测采样
 

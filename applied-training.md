@@ -173,8 +173,8 @@ $$4.2 \times 10^{11} \times 15 \times 10^{12} = 6.3 \times 10^{24} \text{ FLOPs}
 这是什么概念？
 
 - 6.3 **尧** FLOPs（Yotta，10²⁴）
-- 单张 TPU 需要跑 `6.3×10²⁴ ÷ 4.59×10¹⁴ = 4.35 亿秒`
-- 换算成年：**435 年**
+- 单张 TPU 需要跑 `6.3×10²⁴ ÷ 4.59×10¹⁴ ≈ 1.37×10¹⁰ 秒`
+- 换算成年：**约 435 年**
 
 所以我们需要很多很多 TPU 并行工作！
 
@@ -343,7 +343,7 @@ $$X_{opt} = \sqrt{\frac{2BN}{F}} = \sqrt{\frac{2 \times 4.19 \times 10^6 \times 
 
 ### 问题 2：LLaMA 3-405B
 
-拿出 [LLaMA 3.1-405B 的配置](https://huggingface.co/meta-llama/Llama-3.1-405B/blob/main/config.json)，做以下分析：
+拿出 [LLaMA 3.1-405B 的配置](https://huggingface.co/meta-llama/Llama-3.1-405B/blob/main/config.json)（这是个需要申请访问权限的模型，你可能需要先登录 HuggingFace 并请求访问权限才能查看），做以下分析：
 
 **(a) 基础计算**
 1. 整理出参数表（像上面 70B 那样）
